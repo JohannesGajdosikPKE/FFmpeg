@@ -37,6 +37,9 @@
 #include "mpegutils.h"
 #include "libavutil/avassert.h"
 
+extern long long int decode_mb_cavlc_sum[];
+extern long long int GetNow(void);
+
 
 static const uint8_t golomb_to_inter_cbp_gray[16]={
  0, 1, 2, 4, 8, 3, 5,10,12,15, 7,11,13,14, 6, 9,
@@ -437,13 +440,12 @@ static inline int get_level_prefix(GetBitContext *gb){
  * @return <0 if an error occurred
  */
 static int decode_residual(const H264Context *h, H264SliceContext *sl,
-                           GetBitContext *gb, int16_t *block, int n,
-                           const uint8_t *scantable, const uint32_t *qmul,
+                           GetBitContext *gb, int n,
                            int max_coeff)
 {
     static const int coeff_token_table_index[17]= {0, 0, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3};
-    int level[16];
     int zeros_left, coeff_token, total_coeff, i, trailing_ones, run_before;
+///gaj decode_mb_cavlc_sum[16] -= GetNow();
 
     //FIXME put trailing_onex into the context
 
@@ -468,12 +470,20 @@ static int decode_residual(const H264Context *h, H264SliceContext *sl,
 
     //FIXME set last_non_zero?
 
-    if(total_coeff==0)
+    if(total_coeff==0) {
+///gaj decode_mb_cavlc_sum[16] += GetNow();
         return 0;
+    }
     if(total_coeff > (unsigned)max_coeff) {
         av_log(h->avctx, AV_LOG_ERROR, "corrupted macroblock %d %d (total_coeff=%d)\n", sl->mb_x, sl->mb_y, total_coeff);
+///gaj decode_mb_cavlc_sum[16] += GetNow();
         return -1;
     }
+{
+///gaj const long long int t = GetNow();
+///gaj decode_mb_cavlc_sum[16] += t;
+///gaj decode_mb_cavlc_sum[17] -= t;
+}
 
     trailing_ones= coeff_token&3;
     ff_tlog(h->avctx, "trailing:%d, total:%d\n", trailing_ones, total_coeff);
@@ -481,9 +491,6 @@ static int decode_residual(const H264Context *h, H264SliceContext *sl,
 
     i = show_bits(gb, 3);
     skip_bits(gb, trailing_ones);
-    level[0] = 1-((i&4)>>1);
-    level[1] = 1-((i&2)   );
-    level[2] = 1-((i&1)<<1);
 
     if(trailing_ones<total_coeff) {
         int mask, prefix;
@@ -524,12 +531,10 @@ static int decode_residual(const H264Context *h, H264SliceContext *sl,
 
             suffix_length = 2;
             mask= -(level_code&1);
-            level[trailing_ones]= (((2+level_code)>>1) ^ mask) - mask;
         }else{
             level_code += ((level_code>>31)|1) & -(trailing_ones < 3);
 
             suffix_length = 1 + (level_code + 3U > 6U);
-            level[trailing_ones]= level_code;
         }
 
         //remaining coefficients have suffix_length > 0
@@ -560,7 +565,6 @@ static int decode_residual(const H264Context *h, H264SliceContext *sl,
                 mask= -(level_code&1);
                 level_code= (((2+level_code)>>1) ^ mask) - mask;
             }
-            level[i]= level_code;
             suffix_length+= suffix_limit[suffix_length] + level_code > 2U*suffix_limit[suffix_length];
         }
     }
@@ -581,45 +585,36 @@ static int decode_residual(const H264Context *h, H264SliceContext *sl,
     }
 
 #define STORE_BLOCK(type) \
-    scantable += zeros_left + total_coeff - 1; \
     if(n >= LUMA_DC_BLOCK_INDEX){ \
-        ((type*)block)[*scantable] = level[0]; \
         for(i=1;i<total_coeff && zeros_left > 0;i++) { \
             if(zeros_left < 7) \
                 run_before= get_vlc2(gb, run_vlc[zeros_left].table, RUN_VLC_BITS, 1); \
             else \
                 run_before= get_vlc2(gb, run7_vlc.table, RUN7_VLC_BITS, 2); \
             zeros_left -= run_before; \
-            scantable -= 1 + run_before; \
-            ((type*)block)[*scantable]= level[i]; \
-        } \
-        for(;i<total_coeff;i++) { \
-            scantable--; \
-            ((type*)block)[*scantable]= level[i]; \
         } \
     }else{ \
-        ((type*)block)[*scantable] = ((int)(level[0] * qmul[*scantable] + 32))>>6; \
         for(i=1;i<total_coeff && zeros_left > 0;i++) { \
             if(zeros_left < 7) \
                 run_before= get_vlc2(gb, run_vlc[zeros_left].table, RUN_VLC_BITS, 1); \
             else \
                 run_before= get_vlc2(gb, run7_vlc.table, RUN7_VLC_BITS, 2); \
             zeros_left -= run_before; \
-            scantable -= 1 + run_before; \
-            ((type*)block)[*scantable]= ((int)(level[i] * qmul[*scantable] + 32))>>6; \
-        } \
-        for(;i<total_coeff;i++) { \
-            scantable--; \
-            ((type*)block)[*scantable]= ((int)(level[i] * qmul[*scantable] + 32))>>6; \
         } \
     }
 
+{
+///gaj const long long int t = GetNow();
+///gaj decode_mb_cavlc_sum[17] += t;
+///gaj decode_mb_cavlc_sum[18] -= t;
+}
     if (h->pixel_shift) {
         STORE_BLOCK(int32_t)
     } else {
         STORE_BLOCK(int16_t)
     }
 
+///gaj decode_mb_cavlc_sum[18] += GetNow();
     if(zeros_left<0){
         av_log(h->avctx, AV_LOG_ERROR, "negative number of zero coeffs at %d %d\n", sl->mb_x, sl->mb_y);
         return -1;
@@ -631,17 +626,11 @@ static int decode_residual(const H264Context *h, H264SliceContext *sl,
 static av_always_inline
 int decode_luma_residual(const H264Context *h, H264SliceContext *sl,
                          GetBitContext *gb, const uint8_t *scan,
-                         const uint8_t *scan8x8, int pixel_shift,
                          int mb_type, int cbp, int p)
 {
     int i4x4, i8x8;
-    int qscale = p == 0 ? sl->qscale : sl->chroma_qp[p - 1];
     if(IS_INTRA16x16(mb_type)){
-        AV_ZERO128(sl->mb_luma_dc[p]+0);
-        AV_ZERO128(sl->mb_luma_dc[p]+8);
-        AV_ZERO128(sl->mb_luma_dc[p]+16);
-        AV_ZERO128(sl->mb_luma_dc[p]+24);
-        if (decode_residual(h, sl, gb, sl->mb_luma_dc[p], LUMA_DC_BLOCK_INDEX + p, scan, NULL, 16) < 0) {
+        if (decode_residual(h, sl, gb, LUMA_DC_BLOCK_INDEX + p, 16) < 0) {
             return -1; //FIXME continue if partitioned and other return -1 too
         }
 
@@ -651,43 +640,30 @@ int decode_luma_residual(const H264Context *h, H264SliceContext *sl,
             for(i8x8=0; i8x8<4; i8x8++){
                 for(i4x4=0; i4x4<4; i4x4++){
                     const int index= i4x4 + 4*i8x8 + p*16;
-                    if( decode_residual(h, sl, gb, sl->mb + (16*index << pixel_shift),
-                        index, scan + 1, h->ps.pps->dequant4_coeff[p][qscale], 15) < 0 ){
-                        return -1;
-                    }
+                    if( decode_residual(h, sl, gb, index, 15) < 0 ) return -1;
                 }
             }
-            return 0xf;
+            return 0;
         }else{
             fill_rectangle(&sl->non_zero_count_cache[scan8[p*16]], 4, 4, 8, 0, 1);
             return 0;
         }
     }else{
-        int cqm = (IS_INTRA( mb_type ) ? 0:3)+p;
         /* For CAVLC 4:4:4, we need to keep track of the luma 8x8 CBP for deblocking nnz purposes. */
-        int new_cbp = 0;
         for(i8x8=0; i8x8<4; i8x8++){
             if(cbp & (1<<i8x8)){
                 if(IS_8x8DCT(mb_type)){
-                    int16_t *buf = &sl->mb[64*i8x8+256*p << pixel_shift];
                     uint8_t *nnz;
                     for(i4x4=0; i4x4<4; i4x4++){
                         const int index= i4x4 + 4*i8x8 + p*16;
-                        if( decode_residual(h, sl, gb, buf, index, scan8x8+16*i4x4,
-                                            h->ps.pps->dequant8_coeff[cqm][qscale], 16) < 0 )
-                            return -1;
+                        if( decode_residual(h, sl, gb, index, 16) < 0 ) return -1;
                     }
                     nnz = &sl->non_zero_count_cache[scan8[4 * i8x8 + p * 16]];
                     nnz[0] += nnz[1] + nnz[8] + nnz[9];
-                    new_cbp |= !!nnz[0] << i8x8;
                 }else{
                     for(i4x4=0; i4x4<4; i4x4++){
                         const int index= i4x4 + 4*i8x8 + p*16;
-                        if( decode_residual(h, sl, gb, sl->mb + (16*index << pixel_shift), index,
-                                            scan, h->ps.pps->dequant4_coeff[cqm][qscale], 16) < 0 ){
-                            return -1;
-                        }
-                        new_cbp |= sl->non_zero_count_cache[scan8[index]] << i8x8;
+                        if( decode_residual(h, sl, gb, index, 16) < 0 ) return -1;
                     }
                 }
             }else{
@@ -695,9 +671,10 @@ int decode_luma_residual(const H264Context *h, H264SliceContext *sl,
                 nnz[0] = nnz[1] = nnz[8] = nnz[9] = 0;
             }
         }
-        return new_cbp;
+        return 0;
     }
 }
+
 
 int ff_h264_decode_mb_cavlc(const H264Context *h, H264SliceContext *sl)
 {
@@ -706,7 +683,10 @@ int ff_h264_decode_mb_cavlc(const H264Context *h, H264SliceContext *sl)
     unsigned int mb_type, cbp;
     int dct8x8_allowed = h->ps.pps->transform_8x8_mode;
     const int decode_chroma = h->ps.sps->chroma_format_idc == 1 || h->ps.sps->chroma_format_idc == 2;
-    const int pixel_shift = h->pixel_shift;
+
+///gaj decode_mb_cavlc_sum[19] -= GetNow();
+///gaj decode_mb_cavlc_sum[19] += GetNow();
+///gaj decode_mb_cavlc_sum[0] -= GetNow();
 
     mb_xy = sl->mb_xy = sl->mb_x + sl->mb_y*h->mb_stride;
 
@@ -715,27 +695,51 @@ int ff_h264_decode_mb_cavlc(const H264Context *h, H264SliceContext *sl)
                 down the code */
     if (sl->slice_type_nos != AV_PICTURE_TYPE_I) {
         if (sl->mb_skip_run == -1) {
+///gaj decode_mb_cavlc_sum[14] -= GetNow();
             unsigned mb_skip_run = get_ue_golomb_long(&sl->gb);
+///gaj decode_mb_cavlc_sum[14] += GetNow();
             if (mb_skip_run > h->mb_num) {
                 av_log(h->avctx, AV_LOG_ERROR, "mb_skip_run %d is invalid\n", mb_skip_run);
+///gaj decode_mb_cavlc_sum[0] += GetNow();
                 return AVERROR_INVALIDDATA;
             }
             sl->mb_skip_run = mb_skip_run;
         }
 
         if (sl->mb_skip_run--) {
+///gaj decode_mb_cavlc_sum[10] -= GetNow();
             if (FRAME_MBAFF(h) && (sl->mb_y & 1) == 0) {
-                if (sl->mb_skip_run == 0)
+///gaj decode_mb_cavlc_sum[10] += GetNow();
+                if (sl->mb_skip_run == 0) {
+///gaj decode_mb_cavlc_sum[11] -= GetNow();
                     sl->mb_mbaff = sl->mb_field_decoding_flag = get_bits1(&sl->gb);
+///gaj decode_mb_cavlc_sum[11] += GetNow();
+                }
+            } else {
+///gaj decode_mb_cavlc_sum[10] += GetNow();
             }
+///gaj decode_mb_cavlc_sum[12] -= GetNow();
             decode_mb_skip(h, sl);
+///gaj decode_mb_cavlc_sum[12] += GetNow();
+///gaj decode_mb_cavlc_sum[0] += GetNow();
             return 0;
         }
     }
+
+///gaj decode_mb_cavlc_sum[10] -= GetNow();
     if (FRAME_MBAFF(h)) {
-        if ((sl->mb_y & 1) == 0)
+///gaj decode_mb_cavlc_sum[10] += GetNow();
+        if ((sl->mb_y & 1) == 0) {
+///gaj decode_mb_cavlc_sum[13] -= GetNow();
             sl->mb_mbaff = sl->mb_field_decoding_flag = get_bits1(&sl->gb);
+///gaj decode_mb_cavlc_sum[13] += GetNow();
+        }
+    } else {
+///gaj decode_mb_cavlc_sum[10] += GetNow();
     }
+///gaj decode_mb_cavlc_sum[0] += GetNow();
+
+///gaj decode_mb_cavlc_sum[1] -= GetNow();
 
     sl->prev_mb_skipped = 0;
 
@@ -763,6 +767,7 @@ int ff_h264_decode_mb_cavlc(const H264Context *h, H264SliceContext *sl)
 decode_intra_mb:
         if(mb_type > 25){
             av_log(h->avctx, AV_LOG_ERROR, "mb_type %d in %c slice too large at %d %d\n", mb_type, av_get_picture_type_char(sl->slice_type), sl->mb_x, sl->mb_y);
+///gaj decode_mb_cavlc_sum[1] += GetNow();
             return -1;
         }
         partition_count=0;
@@ -770,6 +775,8 @@ decode_intra_mb:
         sl->intra16x16_pred_mode = ff_h264_i_mb_type_info[mb_type].pred_mode;
         mb_type                  = ff_h264_i_mb_type_info[mb_type].type;
     }
+///gaj decode_mb_cavlc_sum[1] += GetNow();
+///gaj decode_mb_cavlc_sum[2] -= GetNow();
 
     if (MB_FIELD(sl))
         mb_type |= MB_TYPE_INTERLACED;
@@ -784,6 +791,7 @@ decode_intra_mb:
         sl->intra_pcm_ptr = align_get_bits(&sl->gb);
         if (get_bits_left(&sl->gb) < mb_size) {
             av_log(h->avctx, AV_LOG_ERROR, "Not enough data for an intra PCM block.\n");
+///gaj decode_mb_cavlc_sum[2] += GetNow();
             return AVERROR_INVALIDDATA;
         }
         skip_bits_long(&sl->gb, mb_size);
@@ -794,11 +802,15 @@ decode_intra_mb:
         memset(h->non_zero_count[mb_xy], 16, 48);
 
         h->cur_pic.mb_type[mb_xy] = mb_type;
+///gaj decode_mb_cavlc_sum[2] += GetNow();
         return 0;
     }
 
     fill_decode_neighbors(h, sl, mb_type);
     fill_decode_caches(h, sl, mb_type);
+
+///gaj decode_mb_cavlc_sum[2] += GetNow();
+///gaj decode_mb_cavlc_sum[3] -= GetNow();
 
     //mb_pred
     if(IS_INTRA(mb_type)){
@@ -828,19 +840,25 @@ decode_intra_mb:
             }
             write_back_intra_pred_mode(h, sl);
             if (ff_h264_check_intra4x4_pred_mode(sl->intra4x4_pred_mode_cache, h->avctx,
-                                                 sl->top_samples_available, sl->left_samples_available) < 0)
+                                                 sl->top_samples_available, sl->left_samples_available) < 0) {
+///gaj decode_mb_cavlc_sum[3] += GetNow();
                 return -1;
+            }
         }else{
             sl->intra16x16_pred_mode = ff_h264_check_intra_pred_mode(h->avctx, sl->top_samples_available,
                                                                      sl->left_samples_available, sl->intra16x16_pred_mode, 0);
-            if (sl->intra16x16_pred_mode < 0)
+            if (sl->intra16x16_pred_mode < 0) {
+///gaj decode_mb_cavlc_sum[3] += GetNow();
                 return -1;
+            }
         }
         if(decode_chroma){
             pred_mode= ff_h264_check_intra_pred_mode(h->avctx, sl->top_samples_available,
                                                      sl->left_samples_available, get_ue_golomb_31(&sl->gb), 1);
-            if(pred_mode < 0)
+            if(pred_mode < 0) {
+///gaj decode_mb_cavlc_sum[3] += GetNow();
                 return -1;
+            }
             sl->chroma_pred_mode = pred_mode;
         } else {
             sl->chroma_pred_mode = DC_128_PRED8x8;
@@ -853,6 +871,7 @@ decode_intra_mb:
                 sl->sub_mb_type[i]= get_ue_golomb_31(&sl->gb);
                 if(sl->sub_mb_type[i] >=13){
                     av_log(h->avctx, AV_LOG_ERROR, "B sub_mb_type %u out of range at %d %d\n", sl->sub_mb_type[i], sl->mb_x, sl->mb_y);
+///gaj decode_mb_cavlc_sum[3] += GetNow();
                     return -1;
                 }
                 sub_partition_count[i] = ff_h264_b_sub_mb_type_info[sl->sub_mb_type[i]].partition_count;
@@ -871,6 +890,7 @@ decode_intra_mb:
                 sl->sub_mb_type[i]= get_ue_golomb_31(&sl->gb);
                 if(sl->sub_mb_type[i] >=4){
                     av_log(h->avctx, AV_LOG_ERROR, "P sub_mb_type %u out of range at %d %d\n", sl->sub_mb_type[i], sl->mb_x, sl->mb_y);
+///gaj decode_mb_cavlc_sum[3] += GetNow();
                     return -1;
                 }
                 sub_partition_count[i] = ff_h264_p_sub_mb_type_info[sl->sub_mb_type[i]].partition_count;
@@ -892,6 +912,7 @@ decode_intra_mb:
                         tmp= get_ue_golomb_31(&sl->gb);
                         if(tmp>=ref_count){
                             av_log(h->avctx, AV_LOG_ERROR, "ref %u overflow\n", tmp);
+///gaj decode_mb_cavlc_sum[3] += GetNow();
                             return -1;
                         }
                     }
@@ -968,6 +989,7 @@ decode_intra_mb:
                             val= get_ue_golomb_31(&sl->gb);
                             if (val >= rc) {
                                 av_log(h->avctx, AV_LOG_ERROR, "ref %u overflow\n", val);
+///gaj decode_mb_cavlc_sum[3] += GetNow();
                                 return -1;
                             }
                         }
@@ -999,6 +1021,7 @@ decode_intra_mb:
                                 val= get_ue_golomb_31(&sl->gb);
                                 if (val >= rc) {
                                     av_log(h->avctx, AV_LOG_ERROR, "ref %u overflow\n", val);
+///gaj decode_mb_cavlc_sum[3] += GetNow();
                                     return -1;
                                 }
                             }
@@ -1037,6 +1060,7 @@ decode_intra_mb:
                                 val= get_ue_golomb_31(&sl->gb);
                                 if (val >= rc) {
                                     av_log(h->avctx, AV_LOG_ERROR, "ref %u overflow\n", val);
+///gaj decode_mb_cavlc_sum[3] += GetNow();
                                     return -1;
                                 }
                             }
@@ -1062,6 +1086,8 @@ decode_intra_mb:
             }
         }
     }
+///gaj decode_mb_cavlc_sum[3] += GetNow();
+///gaj decode_mb_cavlc_sum[4] -= GetNow();
 
     if(IS_INTER(mb_type))
         write_back_motion(h, sl, mb_type);
@@ -1072,6 +1098,7 @@ decode_intra_mb:
         if(decode_chroma){
             if(cbp > 47){
                 av_log(h->avctx, AV_LOG_ERROR, "cbp too large (%u) at %d %d\n", cbp, sl->mb_x, sl->mb_y);
+///gaj decode_mb_cavlc_sum[4] += GetNow();
                 return -1;
             }
             if (IS_INTRA4x4(mb_type))
@@ -1081,6 +1108,7 @@ decode_intra_mb:
         }else{
             if(cbp > 15){
                 av_log(h->avctx, AV_LOG_ERROR, "cbp too large (%u) at %d %d\n", cbp, sl->mb_x, sl->mb_y);
+///gaj decode_mb_cavlc_sum[4] += GetNow();
                 return -1;
             }
             if(IS_INTRA4x4(mb_type)) cbp= golomb_to_intra4x4_cbp_gray[cbp];
@@ -1089,6 +1117,7 @@ decode_intra_mb:
     } else {
         if (!decode_chroma && cbp>15) {
             av_log(h->avctx, AV_LOG_ERROR, "gray chroma\n");
+///gaj decode_mb_cavlc_sum[4] += GetNow();
             return AVERROR_INVALIDDATA;
         }
     }
@@ -1097,16 +1126,17 @@ decode_intra_mb:
         mb_type |= MB_TYPE_8x8DCT*get_bits1(&sl->gb);
     }
     sl->cbp=
-    h->cbp_table[mb_xy]= cbp;
     h->cur_pic.mb_type[mb_xy] = mb_type;
+
+///gaj decode_mb_cavlc_sum[4] += GetNow();
 
     if(cbp || IS_INTRA16x16(mb_type)){
         int i4x4, i8x8, chroma_idx;
         int dquant;
-        int ret;
         GetBitContext *gb = &sl->gb;
-        const uint8_t *scan, *scan8x8;
+        const uint8_t *scan;
         const int max_qp = 51 + 6 * (h->ps.sps->bit_depth_luma - 8);
+///gaj decode_mb_cavlc_sum[5] -= GetNow();
 
         dquant= get_se_golomb(&sl->gb);
 
@@ -1118,6 +1148,7 @@ decode_intra_mb:
             if (((unsigned)sl->qscale) > max_qp){
                 av_log(h->avctx, AV_LOG_ERROR, "dquant out of range (%d) at %d %d\n", dquant, sl->mb_x, sl->mb_y);
                 sl->qscale = max_qp;
+///gaj decode_mb_cavlc_sum[5] += GetNow();
                 return -1;
             }
         }
@@ -1126,47 +1157,53 @@ decode_intra_mb:
         sl->chroma_qp[1] = get_chroma_qp(h->ps.pps, 1, sl->qscale);
 
         if(IS_INTERLACED(mb_type)){
-            scan8x8 = sl->qscale ? h->field_scan8x8_cavlc : h->field_scan8x8_cavlc_q0;
             scan    = sl->qscale ? h->field_scan : h->field_scan_q0;
         }else{
-            scan8x8 = sl->qscale ? h->zigzag_scan8x8_cavlc : h->zigzag_scan8x8_cavlc_q0;
             scan    = sl->qscale ? h->zigzag_scan : h->zigzag_scan_q0;
         }
+///gaj decode_mb_cavlc_sum[5] += GetNow();
 
-        if ((ret = decode_luma_residual(h, sl, gb, scan, scan8x8, pixel_shift, mb_type, cbp, 0)) < 0 ) {
+///gaj decode_mb_cavlc_sum[6] -= GetNow();
+        if (decode_luma_residual(h, sl, gb, scan, mb_type, cbp, 0) < 0 ) {
+///gaj decode_mb_cavlc_sum[6] += GetNow();
             return -1;
         }
-        h->cbp_table[mb_xy] |= ret << 12;
+///gaj decode_mb_cavlc_sum[6] += GetNow();
+
         if (CHROMA444(h)) {
-            if (decode_luma_residual(h, sl, gb, scan, scan8x8, pixel_shift, mb_type, cbp, 1) < 0 ) {
+///gaj decode_mb_cavlc_sum[6] -= GetNow();
+            if (decode_luma_residual(h, sl, gb, scan, mb_type, cbp, 1) < 0 ) {
+///gaj decode_mb_cavlc_sum[6] += GetNow();
                 return -1;
             }
-            if (decode_luma_residual(h, sl, gb, scan, scan8x8, pixel_shift, mb_type, cbp, 2) < 0 ) {
+            if (decode_luma_residual(h, sl, gb, scan, mb_type, cbp, 2) < 0 ) {
+///gaj decode_mb_cavlc_sum[6] += GetNow();
                 return -1;
             }
+///gaj decode_mb_cavlc_sum[6] += GetNow();
         } else {
             const int num_c8x8 = h->ps.sps->chroma_format_idc;
+///gaj decode_mb_cavlc_sum[7] -= GetNow();
 
             if(cbp&0x30){
                 for(chroma_idx=0; chroma_idx<2; chroma_idx++)
-                    if (decode_residual(h, sl, gb, sl->mb + ((256 + 16*16*chroma_idx) << pixel_shift),
+                    if (decode_residual(h, sl, gb,
                                         CHROMA_DC_BLOCK_INDEX + chroma_idx,
-                                        CHROMA422(h) ? ff_h264_chroma422_dc_scan : ff_h264_chroma_dc_scan,
-                                        NULL, 4 * num_c8x8) < 0) {
+                                        4 * num_c8x8) < 0) {
+///gaj decode_mb_cavlc_sum[7] += GetNow();
                         return -1;
                     }
             }
 
             if(cbp&0x20){
                 for(chroma_idx=0; chroma_idx<2; chroma_idx++){
-                    const uint32_t *qmul = h->ps.pps->dequant4_coeff[chroma_idx+1+(IS_INTRA( mb_type ) ? 0:3)][sl->chroma_qp[chroma_idx]];
-                    int16_t *mb = sl->mb + (16*(16 + 16*chroma_idx) << pixel_shift);
                     for (i8x8 = 0; i8x8<num_c8x8; i8x8++) {
                         for (i4x4 = 0; i4x4 < 4; i4x4++) {
                             const int index = 16 + 16*chroma_idx + 8*i8x8 + i4x4;
-                            if (decode_residual(h, sl, gb, mb, index, scan + 1, qmul, 15) < 0)
+                            if (decode_residual(h, sl, gb, index, 15) < 0) {
+///gaj decode_mb_cavlc_sum[7] += GetNow();
                                 return -1;
-                            mb += 16 << pixel_shift;
+                            }
                         }
                     }
                 }
@@ -1174,14 +1211,19 @@ decode_intra_mb:
                 fill_rectangle(&sl->non_zero_count_cache[scan8[16]], 4, 4, 8, 0, 1);
                 fill_rectangle(&sl->non_zero_count_cache[scan8[32]], 4, 4, 8, 0, 1);
             }
+///gaj decode_mb_cavlc_sum[7] += GetNow();
         }
     }else{
+///gaj decode_mb_cavlc_sum[8] -= GetNow();
         fill_rectangle(&sl->non_zero_count_cache[scan8[ 0]], 4, 4, 8, 0, 1);
         fill_rectangle(&sl->non_zero_count_cache[scan8[16]], 4, 4, 8, 0, 1);
         fill_rectangle(&sl->non_zero_count_cache[scan8[32]], 4, 4, 8, 0, 1);
+///gaj decode_mb_cavlc_sum[8] += GetNow();
     }
+///gaj decode_mb_cavlc_sum[9] -= GetNow();
     h->cur_pic.qscale_table[mb_xy] = sl->qscale;
     write_back_non_zero_count(h, sl);
+///gaj decode_mb_cavlc_sum[9] += GetNow();
 
     return 0;
 }

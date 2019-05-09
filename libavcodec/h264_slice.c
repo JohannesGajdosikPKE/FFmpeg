@@ -2446,6 +2446,8 @@ static int fill_filter_caches(const H264Context *h, H264SliceContext *sl, int mb
 
 static void loop_filter(const H264Context *h, H264SliceContext *sl, int start_x, int end_x)
 {
+///gaj
+return;
     uint8_t *dest_y, *dest_cb, *dest_cr;
     int linesize, uvlinesize, mb_x, mb_y;
     const int end_mb_y       = sl->mb_y + FRAME_MBAFF(h);
@@ -2572,6 +2574,14 @@ static void er_add_slice(H264SliceContext *sl,
     }
 }
 
+extern long long int decode_slice_sum[];
+extern long long int GetNow(void);
+
+void foo(void);
+void foo(void) {
+  return;
+}
+
 static int decode_slice(struct AVCodecContext *avctx, void *arg)
 {
     H264SliceContext *sl = arg;
@@ -2583,7 +2593,9 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg)
     sl->linesize   = h->cur_pic_ptr->f->linesize[0];
     sl->uvlinesize = h->cur_pic_ptr->f->linesize[1];
 
+decode_slice_sum[0] -= GetNow();
     ret = alloc_scratch_buffers(sl, sl->linesize);
+decode_slice_sum[0] += GetNow();
     if (ret < 0)
         return ret;
 
@@ -2612,13 +2624,17 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg)
         align_get_bits(&sl->gb);
 
         /* init cabac */
+decode_slice_sum[1] -= GetNow();
         ret = ff_init_cabac_decoder(&sl->cabac,
                               sl->gb.buffer + get_bits_count(&sl->gb) / 8,
                               (get_bits_left(&sl->gb) + 7) / 8);
-        if (ret < 0)
+        if (ret < 0) {
+decode_slice_sum[1] += GetNow();
             return ret;
+        }
 
         ff_h264_init_cabac_states(h, sl);
+decode_slice_sum[1] += GetNow();
 
         for (;;) {
             // START_TIMER
@@ -2626,35 +2642,54 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg)
             if (sl->mb_x + sl->mb_y * h->mb_width >= sl->next_slice_idx) {
                 av_log(h->avctx, AV_LOG_ERROR, "Slice overlaps with next at %d\n",
                        sl->next_slice_idx);
+decode_slice_sum[3] -= GetNow();
                 er_add_slice(sl, sl->resync_mb_x, sl->resync_mb_y, sl->mb_x,
                              sl->mb_y, ER_MB_ERROR);
+decode_slice_sum[3] += GetNow();
                 return AVERROR_INVALIDDATA;
             }
 
+decode_slice_sum[4] -= GetNow();
             ret = ff_h264_decode_mb_cabac(h, sl);
+decode_slice_sum[4] += GetNow();
             // STOP_TIMER("decode_mb_cabac")
 
-            if (ret >= 0)
-                ff_h264_hl_decode_mb(h, sl);
+///gaj            if (ret >= 0) {
+///gajdecode_slice_sum[5] -= GetNow();
+///gaj                ff_h264_hl_decode_mb(h, sl);
+///gajdecode_slice_sum[5] += GetNow();
+///gaj            }
 
             // FIXME optimal? or let mb_decode decode 16x32 ?
             if (ret >= 0 && FRAME_MBAFF(h)) {
                 sl->mb_y++;
 
+decode_slice_sum[4] -= GetNow();
                 ret = ff_h264_decode_mb_cabac(h, sl);
+decode_slice_sum[4] += GetNow();
 
-                if (ret >= 0)
-                    ff_h264_hl_decode_mb(h, sl);
+///gaj                if (ret >= 0) {
+///gajdecode_slice_sum[5] -= GetNow();
+///gaj                    ff_h264_hl_decode_mb(h, sl);
+///gajdecode_slice_sum[5] += GetNow();
+///gaj                }
                 sl->mb_y--;
             }
+decode_slice_sum[1] -= GetNow();
             eos = get_cabac_terminate(&sl->cabac);
+decode_slice_sum[1] += GetNow();
 
             if ((h->workaround_bugs & FF_BUG_TRUNCATED) &&
                 sl->cabac.bytestream > sl->cabac.bytestream_end + 2) {
+decode_slice_sum[3] -= GetNow();
                 er_add_slice(sl, sl->resync_mb_x, sl->resync_mb_y, sl->mb_x - 1,
                              sl->mb_y, ER_MB_END);
-                if (sl->mb_x >= lf_x_start)
-                    loop_filter(h, sl, lf_x_start, sl->mb_x + 1);
+decode_slice_sum[3] += GetNow();
+///gaj                if (sl->mb_x >= lf_x_start) {
+///gajdecode_slice_sum[7] -= GetNow();
+///gaj                    loop_filter(h, sl, lf_x_start, sl->mb_x + 1);
+///gajdecode_slice_sum[7] += GetNow();
+///gaj                }
                 goto finish;
             }
             if (sl->cabac.bytestream > sl->cabac.bytestream_end + 2 )
@@ -2664,30 +2699,44 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg)
                        "error while decoding MB %d %d, bytestream %"PTRDIFF_SPECIFIER"\n",
                        sl->mb_x, sl->mb_y,
                        sl->cabac.bytestream_end - sl->cabac.bytestream);
+decode_slice_sum[3] -= GetNow();
                 er_add_slice(sl, sl->resync_mb_x, sl->resync_mb_y, sl->mb_x,
                              sl->mb_y, ER_MB_ERROR);
+decode_slice_sum[3] += GetNow();
                 return AVERROR_INVALIDDATA;
             }
 
             if (++sl->mb_x >= h->mb_width) {
-                loop_filter(h, sl, lf_x_start, sl->mb_x);
+///gajdecode_slice_sum[7] -= GetNow();
+///gaj                loop_filter(h, sl, lf_x_start, sl->mb_x);
+///gajdecode_slice_sum[7] += GetNow();
                 sl->mb_x = lf_x_start = 0;
+decode_slice_sum[8] -= GetNow();
                 decode_finish_row(h, sl);
+decode_slice_sum[8] += GetNow();
                 ++sl->mb_y;
                 if (FIELD_OR_MBAFF_PICTURE(h)) {
                     ++sl->mb_y;
-                    if (FRAME_MBAFF(h) && sl->mb_y < h->mb_height)
+                    if (FRAME_MBAFF(h) && sl->mb_y < h->mb_height) {
+decode_slice_sum[9] -= GetNow();
                         predict_field_decoding_flag(h, sl);
+decode_slice_sum[9] += GetNow();
+                    }
                 }
             }
 
             if (eos || sl->mb_y >= h->mb_height) {
                 ff_tlog(h->avctx, "slice end %d %d\n",
                         get_bits_count(&sl->gb), sl->gb.size_in_bits);
+decode_slice_sum[3] -= GetNow();
                 er_add_slice(sl, sl->resync_mb_x, sl->resync_mb_y, sl->mb_x - 1,
                              sl->mb_y, ER_MB_END);
-                if (sl->mb_x > lf_x_start)
-                    loop_filter(h, sl, lf_x_start, sl->mb_x);
+decode_slice_sum[3] += GetNow();
+///gaj                if (sl->mb_x > lf_x_start) {
+///gajdecode_slice_sum[7] -= GetNow();
+///gaj                    loop_filter(h, sl, lf_x_start, sl->mb_x);
+///gajdecode_slice_sum[7] += GetNow();
+///gaj                }
                 goto finish;
             }
         }
@@ -2698,43 +2747,64 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg)
             if (sl->mb_x + sl->mb_y * h->mb_width >= sl->next_slice_idx) {
                 av_log(h->avctx, AV_LOG_ERROR, "Slice overlaps with next at %d\n",
                        sl->next_slice_idx);
+decode_slice_sum[3] -= GetNow();
                 er_add_slice(sl, sl->resync_mb_x, sl->resync_mb_y, sl->mb_x,
                              sl->mb_y, ER_MB_ERROR);
+decode_slice_sum[3] += GetNow();
                 return AVERROR_INVALIDDATA;
             }
 
+decode_slice_sum[6] -= GetNow();
             ret = ff_h264_decode_mb_cavlc(h, sl);
+decode_slice_sum[6] += GetNow();
 
-            if (ret >= 0)
-                ff_h264_hl_decode_mb(h, sl);
+///gaj            if (ret >= 0) {
+///gajdecode_slice_sum[5] -= GetNow();
+///gaj                ff_h264_hl_decode_mb(h, sl);
+///gajdecode_slice_sum[5] += GetNow();
+///gaj            }
 
             // FIXME optimal? or let mb_decode decode 16x32 ?
             if (ret >= 0 && FRAME_MBAFF(h)) {
                 sl->mb_y++;
+decode_slice_sum[6] -= GetNow();
                 ret = ff_h264_decode_mb_cavlc(h, sl);
+decode_slice_sum[6] += GetNow();
 
-                if (ret >= 0)
-                    ff_h264_hl_decode_mb(h, sl);
+///gaj                if (ret >= 0) {
+///gajdecode_slice_sum[5] -= GetNow();
+///gaj                    ff_h264_hl_decode_mb(h, sl);
+///gajdecode_slice_sum[5] += GetNow();
+///gaj                }
                 sl->mb_y--;
             }
 
             if (ret < 0) {
                 av_log(h->avctx, AV_LOG_ERROR,
                        "error while decoding MB %d %d\n", sl->mb_x, sl->mb_y);
+decode_slice_sum[3] -= GetNow();
                 er_add_slice(sl, sl->resync_mb_x, sl->resync_mb_y, sl->mb_x,
                              sl->mb_y, ER_MB_ERROR);
+decode_slice_sum[3] += GetNow();
                 return ret;
             }
 
             if (++sl->mb_x >= h->mb_width) {
-                loop_filter(h, sl, lf_x_start, sl->mb_x);
+///gajdecode_slice_sum[7] -= GetNow();
+///gaj                loop_filter(h, sl, lf_x_start, sl->mb_x);
+///gajdecode_slice_sum[7] += GetNow();
                 sl->mb_x = lf_x_start = 0;
+decode_slice_sum[8] -= GetNow();
                 decode_finish_row(h, sl);
+decode_slice_sum[8] += GetNow();
                 ++sl->mb_y;
                 if (FIELD_OR_MBAFF_PICTURE(h)) {
                     ++sl->mb_y;
-                    if (FRAME_MBAFF(h) && sl->mb_y < h->mb_height)
+                    if (FRAME_MBAFF(h) && sl->mb_y < h->mb_height) {
+decode_slice_sum[9] -= GetNow();
                         predict_field_decoding_flag(h, sl);
+decode_slice_sum[9] += GetNow();
+                    }
                 }
                 if (sl->mb_y >= h->mb_height) {
                     ff_tlog(h->avctx, "slice end %d %d\n",
@@ -2742,13 +2812,17 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg)
 
                     if (   get_bits_left(&sl->gb) == 0
                         || get_bits_left(&sl->gb) > 0 && !(h->avctx->err_recognition & AV_EF_AGGRESSIVE)) {
+decode_slice_sum[3] -= GetNow();
                         er_add_slice(sl, sl->resync_mb_x, sl->resync_mb_y,
                                      sl->mb_x - 1, sl->mb_y, ER_MB_END);
+decode_slice_sum[3] += GetNow();
 
                         goto finish;
                     } else {
+decode_slice_sum[3] -= GetNow();
                         er_add_slice(sl, sl->resync_mb_x, sl->resync_mb_y,
                                      sl->mb_x, sl->mb_y, ER_MB_END);
+decode_slice_sum[3] += GetNow();
 
                         return AVERROR_INVALIDDATA;
                     }
@@ -2760,15 +2834,22 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg)
                         get_bits_count(&sl->gb), sl->gb.size_in_bits);
 
                 if (get_bits_left(&sl->gb) == 0) {
+decode_slice_sum[3] -= GetNow();
                     er_add_slice(sl, sl->resync_mb_x, sl->resync_mb_y,
                                  sl->mb_x - 1, sl->mb_y, ER_MB_END);
-                    if (sl->mb_x > lf_x_start)
-                        loop_filter(h, sl, lf_x_start, sl->mb_x);
+decode_slice_sum[3] += GetNow();
+///gaj                    if (sl->mb_x > lf_x_start) {
+///gajdecode_slice_sum[7] -= GetNow();
+///gaj                        loop_filter(h, sl, lf_x_start, sl->mb_x);
+///gajdecode_slice_sum[7] += GetNow();
+///gaj                    }
 
                     goto finish;
                 } else {
+decode_slice_sum[3] -= GetNow();
                     er_add_slice(sl, sl->resync_mb_x, sl->resync_mb_y, sl->mb_x,
                                  sl->mb_y, ER_MB_ERROR);
+decode_slice_sum[3] += GetNow();
 
                     return AVERROR_INVALIDDATA;
                 }
@@ -2811,6 +2892,7 @@ int ff_h264_execute_decode_slices(H264Context *h)
         if (ret < 0)
             goto finish;
     } else {
+abort();
         av_assert0(context_count > 0);
         for (i = 0; i < context_count; i++) {
             int next_slice_idx = h->mb_width * h->mb_height;

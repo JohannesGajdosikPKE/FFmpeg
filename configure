@@ -1677,7 +1677,6 @@ EXAMPLE_LIST="
 "
 
 EXTERNAL_AUTODETECT_LIBRARY_LIST="
-    alsa
     appkit
     avfoundation
     bzlib
@@ -1816,7 +1815,6 @@ HWACCEL_AUTODETECT_LIBRARY_LIST="
     vaapi
     vdpau
     videotoolbox
-    v4l2_m2m
     xvmc
 "
 
@@ -3591,9 +3589,7 @@ avutil_extralibs="d3d11va_extralibs nanosleep_extralibs pthreads_extralibs vaapi
 
 # programs
 ffmpeg_deps="avcodec avfilter avformat"
-ffmpeg_select="aformat_filter anull_filter atrim_filter format_filter
-               hflip_filter null_filter
-               transpose_filter trim_filter vflip_filter"
+ffmpeg_select=""
 ffmpeg_suggest="ole32 psapi shell32"
 ffplay_deps="avcodec avformat swscale swresample sdl2"
 ffplay_select="rdft crop_filter transpose_filter hflip_filter vflip_filter rotate_filter"
