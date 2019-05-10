@@ -48,6 +48,22 @@
 #include "rectangle.h"
 #include "thread.h"
 
+#define GAJ_PERFORMANCE_CHECKING
+
+#ifdef GAJ_PERFORMANCE_CHECKING
+extern long long int decode_slice_sum[];
+extern long long int GetNow(void);
+#define GAJ_CHECK_PERFORMANCE_START(x) x-=GetNow();
+#define GAJ_CHECK_PERFORMANCE_STOP(x) x+=GetNow();
+#define GAJ_CHECK_PERFORMANCE_STOP_START(x,y) {const long long int t=GetNow();x+=t;y-=t;}
+#define GAJ_CHECK_PERFORMANCE_STOP_STOP(x,y) {const long long int t=GetNow();x+=t;y+=t;}
+#else
+#define GAJ_CHECK_PERFORMANCE_START(x)
+#define GAJ_CHECK_PERFORMANCE_STOP(x)
+#define GAJ_CHECK_PERFORMANCE_STOP_START(x,y)
+#define GAJ_CHECK_PERFORMANCE_STOP_STOP(x,y)
+#endif
+
 static const uint8_t field_scan[16+1] = {
     0 + 0 * 4, 0 + 1 * 4, 1 + 0 * 4, 0 + 2 * 4,
     0 + 3 * 4, 1 + 1 * 4, 1 + 2 * 4, 1 + 3 * 4,
@@ -2299,6 +2315,7 @@ static av_always_inline void fill_filter_caches_inter(const H264Context *h,
     }
 }
 
+#ifdef GAJ_COMMENT_OUT // gaj
 /**
  * @return non zero if the loop filter can be skipped
  */
@@ -2443,11 +2460,11 @@ static int fill_filter_caches(const H264Context *h, H264SliceContext *sl, int mb
 
     return 0;
 }
+#endif
 
+#ifdef GAJ_COMMENT_OUT // gaj
 static void loop_filter(const H264Context *h, H264SliceContext *sl, int start_x, int end_x)
 {
-///gaj
-return;
     uint8_t *dest_y, *dest_cb, *dest_cr;
     int linesize, uvlinesize, mb_x, mb_y;
     const int end_mb_y       = sl->mb_y + FRAME_MBAFF(h);
@@ -2515,6 +2532,7 @@ return;
     sl->chroma_qp[0] = get_chroma_qp(h->ps.pps, 0, sl->qscale);
     sl->chroma_qp[1] = get_chroma_qp(h->ps.pps, 1, sl->qscale);
 }
+#endif
 
 static void predict_field_decoding_flag(const H264Context *h, H264SliceContext *sl)
 {
@@ -2574,14 +2592,6 @@ static void er_add_slice(H264SliceContext *sl,
     }
 }
 
-extern long long int decode_slice_sum[];
-extern long long int GetNow(void);
-
-void foo(void);
-void foo(void) {
-  return;
-}
-
 static int decode_slice(struct AVCodecContext *avctx, void *arg)
 {
     H264SliceContext *sl = arg;
@@ -2593,9 +2603,9 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg)
     sl->linesize   = h->cur_pic_ptr->f->linesize[0];
     sl->uvlinesize = h->cur_pic_ptr->f->linesize[1];
 
-decode_slice_sum[0] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(decode_slice_sum[0])
     ret = alloc_scratch_buffers(sl, sl->linesize);
-decode_slice_sum[0] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_slice_sum[0])
     if (ret < 0)
         return ret;
 
@@ -2624,17 +2634,17 @@ decode_slice_sum[0] += GetNow();
         align_get_bits(&sl->gb);
 
         /* init cabac */
-decode_slice_sum[1] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(decode_slice_sum[1])
         ret = ff_init_cabac_decoder(&sl->cabac,
                               sl->gb.buffer + get_bits_count(&sl->gb) / 8,
                               (get_bits_left(&sl->gb) + 7) / 8);
         if (ret < 0) {
-decode_slice_sum[1] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_slice_sum[1])
             return ret;
         }
 
         ff_h264_init_cabac_states(h, sl);
-decode_slice_sum[1] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_slice_sum[1])
 
         for (;;) {
             // START_TIMER
@@ -2642,53 +2652,53 @@ decode_slice_sum[1] += GetNow();
             if (sl->mb_x + sl->mb_y * h->mb_width >= sl->next_slice_idx) {
                 av_log(h->avctx, AV_LOG_ERROR, "Slice overlaps with next at %d\n",
                        sl->next_slice_idx);
-decode_slice_sum[3] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(decode_slice_sum[3])
                 er_add_slice(sl, sl->resync_mb_x, sl->resync_mb_y, sl->mb_x,
                              sl->mb_y, ER_MB_ERROR);
-decode_slice_sum[3] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_slice_sum[3])
                 return AVERROR_INVALIDDATA;
             }
 
-decode_slice_sum[4] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(decode_slice_sum[4])
             ret = ff_h264_decode_mb_cabac(h, sl);
-decode_slice_sum[4] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_slice_sum[4])
             // STOP_TIMER("decode_mb_cabac")
 
 ///gaj            if (ret >= 0) {
-///gajdecode_slice_sum[5] -= GetNow();
+///gaj GAJ_CHECK_PERFORMANCE_START(decode_slice_sum[5])
 ///gaj                ff_h264_hl_decode_mb(h, sl);
-///gajdecode_slice_sum[5] += GetNow();
+///gaj GAJ_CHECK_PERFORMANCE_STOP(decode_slice_sum[5])
 ///gaj            }
 
             // FIXME optimal? or let mb_decode decode 16x32 ?
             if (ret >= 0 && FRAME_MBAFF(h)) {
                 sl->mb_y++;
 
-decode_slice_sum[4] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(decode_slice_sum[4])
                 ret = ff_h264_decode_mb_cabac(h, sl);
-decode_slice_sum[4] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_slice_sum[4])
 
 ///gaj                if (ret >= 0) {
-///gajdecode_slice_sum[5] -= GetNow();
+///gaj GAJ_CHECK_PERFORMANCE_START(decode_slice_sum[5])
 ///gaj                    ff_h264_hl_decode_mb(h, sl);
-///gajdecode_slice_sum[5] += GetNow();
+///gaj GAJ_CHECK_PERFORMANCE_STOP(decode_slice_sum[5])
 ///gaj                }
                 sl->mb_y--;
             }
-decode_slice_sum[1] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(decode_slice_sum[1])
             eos = get_cabac_terminate(&sl->cabac);
-decode_slice_sum[1] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_slice_sum[1])
 
             if ((h->workaround_bugs & FF_BUG_TRUNCATED) &&
                 sl->cabac.bytestream > sl->cabac.bytestream_end + 2) {
-decode_slice_sum[3] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(decode_slice_sum[3])
                 er_add_slice(sl, sl->resync_mb_x, sl->resync_mb_y, sl->mb_x - 1,
                              sl->mb_y, ER_MB_END);
-decode_slice_sum[3] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_slice_sum[3])
 ///gaj                if (sl->mb_x >= lf_x_start) {
-///gajdecode_slice_sum[7] -= GetNow();
+///gaj GAJ_CHECK_PERFORMANCE_START(decode_slice_sum[7])
 ///gaj                    loop_filter(h, sl, lf_x_start, sl->mb_x + 1);
-///gajdecode_slice_sum[7] += GetNow();
+///gaj GAJ_CHECK_PERFORMANCE_STOP(decode_slice_sum[7])
 ///gaj                }
                 goto finish;
             }
@@ -2699,28 +2709,28 @@ decode_slice_sum[3] += GetNow();
                        "error while decoding MB %d %d, bytestream %"PTRDIFF_SPECIFIER"\n",
                        sl->mb_x, sl->mb_y,
                        sl->cabac.bytestream_end - sl->cabac.bytestream);
-decode_slice_sum[3] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(decode_slice_sum[3])
                 er_add_slice(sl, sl->resync_mb_x, sl->resync_mb_y, sl->mb_x,
                              sl->mb_y, ER_MB_ERROR);
-decode_slice_sum[3] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_slice_sum[3])
                 return AVERROR_INVALIDDATA;
             }
 
             if (++sl->mb_x >= h->mb_width) {
-///gajdecode_slice_sum[7] -= GetNow();
+///gaj GAJ_CHECK_PERFORMANCE_START(decode_slice_sum[7])
 ///gaj                loop_filter(h, sl, lf_x_start, sl->mb_x);
-///gajdecode_slice_sum[7] += GetNow();
+///gaj GAJ_CHECK_PERFORMANCE_STOP(decode_slice_sum[7])
                 sl->mb_x = lf_x_start = 0;
-decode_slice_sum[8] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(decode_slice_sum[8])
                 decode_finish_row(h, sl);
-decode_slice_sum[8] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_slice_sum[8])
                 ++sl->mb_y;
                 if (FIELD_OR_MBAFF_PICTURE(h)) {
                     ++sl->mb_y;
                     if (FRAME_MBAFF(h) && sl->mb_y < h->mb_height) {
-decode_slice_sum[9] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(decode_slice_sum[9])
                         predict_field_decoding_flag(h, sl);
-decode_slice_sum[9] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_slice_sum[9])
                     }
                 }
             }
@@ -2728,14 +2738,14 @@ decode_slice_sum[9] += GetNow();
             if (eos || sl->mb_y >= h->mb_height) {
                 ff_tlog(h->avctx, "slice end %d %d\n",
                         get_bits_count(&sl->gb), sl->gb.size_in_bits);
-decode_slice_sum[3] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(decode_slice_sum[3])
                 er_add_slice(sl, sl->resync_mb_x, sl->resync_mb_y, sl->mb_x - 1,
                              sl->mb_y, ER_MB_END);
-decode_slice_sum[3] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_slice_sum[3])
 ///gaj                if (sl->mb_x > lf_x_start) {
-///gajdecode_slice_sum[7] -= GetNow();
+///gaj GAJ_CHECK_PERFORMANCE_START(decode_slice_sum[7])
 ///gaj                    loop_filter(h, sl, lf_x_start, sl->mb_x);
-///gajdecode_slice_sum[7] += GetNow();
+///gaj GAJ_CHECK_PERFORMANCE_STOP(decode_slice_sum[7])
 ///gaj                }
                 goto finish;
             }
@@ -2747,34 +2757,34 @@ decode_slice_sum[3] += GetNow();
             if (sl->mb_x + sl->mb_y * h->mb_width >= sl->next_slice_idx) {
                 av_log(h->avctx, AV_LOG_ERROR, "Slice overlaps with next at %d\n",
                        sl->next_slice_idx);
-decode_slice_sum[3] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(decode_slice_sum[3])
                 er_add_slice(sl, sl->resync_mb_x, sl->resync_mb_y, sl->mb_x,
                              sl->mb_y, ER_MB_ERROR);
-decode_slice_sum[3] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_slice_sum[3])
                 return AVERROR_INVALIDDATA;
             }
 
-decode_slice_sum[6] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(decode_slice_sum[6])
             ret = ff_h264_decode_mb_cavlc(h, sl);
-decode_slice_sum[6] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_slice_sum[6])
 
 ///gaj            if (ret >= 0) {
-///gajdecode_slice_sum[5] -= GetNow();
+///gaj GAJ_CHECK_PERFORMANCE_START(decode_slice_sum[5])
 ///gaj                ff_h264_hl_decode_mb(h, sl);
-///gajdecode_slice_sum[5] += GetNow();
+///gaj GAJ_CHECK_PERFORMANCE_STOP(decode_slice_sum[5])
 ///gaj            }
 
             // FIXME optimal? or let mb_decode decode 16x32 ?
             if (ret >= 0 && FRAME_MBAFF(h)) {
                 sl->mb_y++;
-decode_slice_sum[6] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(decode_slice_sum[6])
                 ret = ff_h264_decode_mb_cavlc(h, sl);
-decode_slice_sum[6] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_slice_sum[6])
 
 ///gaj                if (ret >= 0) {
-///gajdecode_slice_sum[5] -= GetNow();
+///gaj GAJ_CHECK_PERFORMANCE_START(decode_slice_sum[5])
 ///gaj                    ff_h264_hl_decode_mb(h, sl);
-///gajdecode_slice_sum[5] += GetNow();
+///gaj GAJ_CHECK_PERFORMANCE_STOP(decode_slice_sum[5])
 ///gaj                }
                 sl->mb_y--;
             }
@@ -2782,28 +2792,28 @@ decode_slice_sum[6] += GetNow();
             if (ret < 0) {
                 av_log(h->avctx, AV_LOG_ERROR,
                        "error while decoding MB %d %d\n", sl->mb_x, sl->mb_y);
-decode_slice_sum[3] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(decode_slice_sum[3])
                 er_add_slice(sl, sl->resync_mb_x, sl->resync_mb_y, sl->mb_x,
                              sl->mb_y, ER_MB_ERROR);
-decode_slice_sum[3] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_slice_sum[3])
                 return ret;
             }
 
             if (++sl->mb_x >= h->mb_width) {
-///gajdecode_slice_sum[7] -= GetNow();
+///gaj GAJ_CHECK_PERFORMANCE_START(decode_slice_sum[7])
 ///gaj                loop_filter(h, sl, lf_x_start, sl->mb_x);
-///gajdecode_slice_sum[7] += GetNow();
+///gaj GAJ_CHECK_PERFORMANCE_STOP(decode_slice_sum[7])
                 sl->mb_x = lf_x_start = 0;
-decode_slice_sum[8] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(decode_slice_sum[8])
                 decode_finish_row(h, sl);
-decode_slice_sum[8] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_slice_sum[8])
                 ++sl->mb_y;
                 if (FIELD_OR_MBAFF_PICTURE(h)) {
                     ++sl->mb_y;
                     if (FRAME_MBAFF(h) && sl->mb_y < h->mb_height) {
-decode_slice_sum[9] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(decode_slice_sum[9])
                         predict_field_decoding_flag(h, sl);
-decode_slice_sum[9] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_slice_sum[9])
                     }
                 }
                 if (sl->mb_y >= h->mb_height) {
@@ -2812,17 +2822,17 @@ decode_slice_sum[9] += GetNow();
 
                     if (   get_bits_left(&sl->gb) == 0
                         || get_bits_left(&sl->gb) > 0 && !(h->avctx->err_recognition & AV_EF_AGGRESSIVE)) {
-decode_slice_sum[3] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(decode_slice_sum[3])
                         er_add_slice(sl, sl->resync_mb_x, sl->resync_mb_y,
                                      sl->mb_x - 1, sl->mb_y, ER_MB_END);
-decode_slice_sum[3] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_slice_sum[3])
 
                         goto finish;
                     } else {
-decode_slice_sum[3] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(decode_slice_sum[3])
                         er_add_slice(sl, sl->resync_mb_x, sl->resync_mb_y,
                                      sl->mb_x, sl->mb_y, ER_MB_END);
-decode_slice_sum[3] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_slice_sum[3])
 
                         return AVERROR_INVALIDDATA;
                     }
@@ -2834,22 +2844,22 @@ decode_slice_sum[3] += GetNow();
                         get_bits_count(&sl->gb), sl->gb.size_in_bits);
 
                 if (get_bits_left(&sl->gb) == 0) {
-decode_slice_sum[3] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(decode_slice_sum[3])
                     er_add_slice(sl, sl->resync_mb_x, sl->resync_mb_y,
                                  sl->mb_x - 1, sl->mb_y, ER_MB_END);
-decode_slice_sum[3] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_slice_sum[3])
 ///gaj                    if (sl->mb_x > lf_x_start) {
-///gajdecode_slice_sum[7] -= GetNow();
+///gaj GAJ_CHECK_PERFORMANCE_START(decode_slice_sum[7])
 ///gaj                        loop_filter(h, sl, lf_x_start, sl->mb_x);
-///gajdecode_slice_sum[7] += GetNow();
+///gaj GAJ_CHECK_PERFORMANCE_STOP(decode_slice_sum[7])
 ///gaj                    }
 
                     goto finish;
                 } else {
-decode_slice_sum[3] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(decode_slice_sum[3])
                     er_add_slice(sl, sl->resync_mb_x, sl->resync_mb_y, sl->mb_x,
                                  sl->mb_y, ER_MB_ERROR);
-decode_slice_sum[3] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_slice_sum[3])
 
                     return AVERROR_INVALIDDATA;
                 }
@@ -2892,7 +2902,7 @@ int ff_h264_execute_decode_slices(H264Context *h)
         if (ret < 0)
             goto finish;
     } else {
-abort();
+///gaj: I have never seen this code executed
         av_assert0(context_count > 0);
         for (i = 0; i < context_count; i++) {
             int next_slice_idx = h->mb_width * h->mb_height;
@@ -2931,16 +2941,17 @@ abort();
             h->postpone_filter = 0;
 
             for (i = 0; i < context_count; i++) {
-                int y_end, x_end;
+                int y_end;
+///gaj                int x_end;
 
                 sl = &h->slice_ctx[i];
                 y_end = FFMIN(sl->mb_y + 1, h->mb_height);
-                x_end = (sl->mb_y >= h->mb_height) ? h->mb_width : sl->mb_x;
+///gaj                x_end = (sl->mb_y >= h->mb_height) ? h->mb_width : sl->mb_x;
 
                 for (j = sl->resync_mb_y; j < y_end; j += 1 + FIELD_OR_MBAFF_PICTURE(h)) {
                     sl->mb_y = j;
-                    loop_filter(h, sl, j > sl->resync_mb_y ? 0 : sl->resync_mb_x,
-                                j == y_end - 1 ? x_end : h->mb_width);
+///gaj                    loop_filter(h, sl, j > sl->resync_mb_y ? 0 : sl->resync_mb_x,
+///gaj                                j == y_end - 1 ? x_end : h->mb_width);
                 }
             }
         }

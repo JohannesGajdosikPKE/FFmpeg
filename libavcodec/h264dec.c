@@ -55,10 +55,23 @@
 #include "rectangle.h"
 #include "thread.h"
 
+#define GAJ_PERFORMANCE_CHECKING
+
+#ifdef GAJ_PERFORMANCE_CHECKING
 extern long long int h264_decode_frame_sum[];
-///gaj extern long long int decode_nal_units_sum[];
-///gaj extern long long int finalize_frame_sum[];
+extern long long int decode_nal_units_sum[];
+extern long long int finalize_frame_sum[];
 extern long long int GetNow(void);
+#define GAJ_CHECK_PERFORMANCE_START(x) x-=GetNow();
+#define GAJ_CHECK_PERFORMANCE_STOP(x) x+=GetNow();
+#define GAJ_CHECK_PERFORMANCE_STOP_START(x,y) {const long long int t=GetNow();x+=t;y-=t;}
+#define GAJ_CHECK_PERFORMANCE_STOP_STOP(x,y) {const long long int t=GetNow();x+=t;y+=t;}
+#else
+#define GAJ_CHECK_PERFORMANCE_START(x)
+#define GAJ_CHECK_PERFORMANCE_STOP(x)
+#define GAJ_CHECK_PERFORMANCE_STOP_START(x,y)
+#define GAJ_CHECK_PERFORMANCE_STOP_STOP(x,y)
+#endif
 
 const uint16_t ff_h264_mb_sizes[4] = { 256, 384, 512, 768 };
 
@@ -613,7 +626,7 @@ static int decode_nal_units(H264Context *h, const uint8_t *buf, int buf_size)
     h->has_slice = 0;
     h->nal_unit_type= 0;
 
-///gaj decode_nal_units_sum[0] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(decode_nal_units_sum[0])
 
     if (!(avctx->flags2 & AV_CODEC_FLAG2_CHUNKS)) {
         h->current_slice = 0;
@@ -629,12 +642,10 @@ static int decode_nal_units(H264Context *h, const uint8_t *buf, int buf_size)
         }else if(buf_size > 3 && AV_RB32(buf) > 1 && AV_RB32(buf) <= (unsigned)buf_size)
             h->is_avc = 1;
     }
-///gaj decode_nal_units_sum[0] += GetNow();
-
-///gaj decode_nal_units_sum[1] -= GetNow();
+GAJ_CHECK_PERFORMANCE_STOP_START(decode_nal_units_sum[0],decode_nal_units_sum[1])
     ret = ff_h2645_packet_split(&h->pkt, buf, buf_size, avctx, h->is_avc, h->nal_length_size,
                                 avctx->codec_id, avctx->flags2 & AV_CODEC_FLAG2_FAST, 0);
-///gaj decode_nal_units_sum[1] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_nal_units_sum[1])
     if (ret < 0) {
         av_log(avctx, AV_LOG_ERROR,
                "Error splitting the input into NAL units.\n");
@@ -679,14 +690,14 @@ static int decode_nal_units(H264Context *h, const uint8_t *buf, int buf_size)
 //fprintf(stderr,"gaj H264_NAL_SLICE: %d\n",nal->size);
             h->has_slice = 1;
 
-///gaj decode_nal_units_sum[2] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(decode_nal_units_sum[2])
             if ((err = ff_h264_queue_decode_slice(h, nal))) {
                 H264SliceContext *sl = h->slice_ctx + h->nb_slice_ctx_queued;
-///gaj decode_nal_units_sum[2] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_nal_units_sum[2])
                 sl->ref_count[0] = sl->ref_count[1] = 0;
                 break;
             }
-///gaj decode_nal_units_sum[2] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_nal_units_sum[2])
 
             if (h->current_slice == 1) {
                 if (avctx->active_thread_type & FF_THREAD_FRAME &&
@@ -703,13 +714,14 @@ static int decode_nal_units(H264Context *h, const uint8_t *buf, int buf_size)
             max_slice_ctx = avctx->hwaccel ? 1 : h->nb_slice_ctx;
             if (h->nb_slice_ctx_queued == max_slice_ctx) {
                 if (h->avctx->hwaccel) {
-                    abort();
+///gaj: this code is not executed
+abort();
                     ret = avctx->hwaccel->decode_slice(avctx, nal->raw_data, nal->raw_size);
                     h->nb_slice_ctx_queued = 0;
                 } else {
-///gaj decode_nal_units_sum[3] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(decode_nal_units_sum[3])
                     ret = ff_h264_execute_decode_slices(h);
-///gaj decode_nal_units_sum[3] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_nal_units_sum[3])
                 }
                 if (ret < 0 && (h->avctx->err_recognition & AV_EF_EXPLODE))
                     goto end;
@@ -718,23 +730,24 @@ static int decode_nal_units(H264Context *h, const uint8_t *buf, int buf_size)
         case H264_NAL_DPA:
         case H264_NAL_DPB:
         case H264_NAL_DPC:
-///gaj decode_nal_units_sum[4] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(decode_nal_units_sum[4])
             avpriv_request_sample(avctx, "data partitioning");
-///gaj decode_nal_units_sum[4] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_nal_units_sum[4])
             break;
         case H264_NAL_SEI:
-///gaj decode_nal_units_sum[5] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(decode_nal_units_sum[5])
             ret = ff_h264_sei_decode(&h->sei, &nal->gb, &h->ps, avctx);
             h->has_recovery_point = h->has_recovery_point || h->sei.recovery_point.recovery_frame_cnt != -1;
             if (avctx->debug & FF_DEBUG_GREEN_MD)
                 debug_green_metadata(&h->sei.green_metadata, h->avctx);
-///gaj decode_nal_units_sum[5] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_nal_units_sum[5])
             if (ret < 0 && (h->avctx->err_recognition & AV_EF_EXPLODE))
                 goto end;
             break;
         case H264_NAL_SPS: {
             GetBitContext tmp_gb = nal->gb;
             if (avctx->hwaccel && avctx->hwaccel->decode_params) {
+///gaj: this code is not executed
 abort();
                 ret = avctx->hwaccel->decode_params(avctx,
                                                     nal->type,
@@ -743,24 +756,25 @@ abort();
                 if (ret < 0)
                     goto end;
             }
-///gaj decode_nal_units_sum[6] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(decode_nal_units_sum[6])
             if (ff_h264_decode_seq_parameter_set(&tmp_gb, avctx, &h->ps, 0) >= 0) {
-///gaj decode_nal_units_sum[6] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_nal_units_sum[6])
                 break;
             }
             av_log(h->avctx, AV_LOG_DEBUG,
                    "SPS decoding failure, trying again with the complete NAL\n");
             init_get_bits8(&tmp_gb, nal->raw_data + 1, nal->raw_size - 1);
             if (ff_h264_decode_seq_parameter_set(&tmp_gb, avctx, &h->ps, 0) >= 0) {
-///gaj decode_nal_units_sum[6] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_nal_units_sum[6])
                 break;
             }
             ff_h264_decode_seq_parameter_set(&nal->gb, avctx, &h->ps, 1);
-///gaj decode_nal_units_sum[6] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_nal_units_sum[6])
             break;
         }
         case H264_NAL_PPS:
             if (avctx->hwaccel && avctx->hwaccel->decode_params) {
+///gaj: this code is not executed
 abort();
                 ret = avctx->hwaccel->decode_params(avctx,
                                                     nal->type,
@@ -769,10 +783,10 @@ abort();
                 if (ret < 0)
                     goto end;
             }
-///gaj decode_nal_units_sum[6] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(decode_nal_units_sum[6])
             ret = ff_h264_decode_picture_parameter_set(&nal->gb, avctx, &h->ps,
                                                        nal->size_bits);
-///gaj decode_nal_units_sum[6] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_nal_units_sum[6])
             if (ret < 0 && (h->avctx->err_recognition & AV_EF_EXPLODE))
                 goto end;
             break;
@@ -793,16 +807,16 @@ abort();
         }
     }
 
-///gaj decode_nal_units_sum[7] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(decode_nal_units_sum[7])
     ret = ff_h264_execute_decode_slices(h);
-///gaj decode_nal_units_sum[7] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_nal_units_sum[7])
     if (ret < 0 && (h->avctx->err_recognition & AV_EF_EXPLODE))
         goto end;
 
     ret = 0;
 end:
 
-///gaj decode_nal_units_sum[8] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(decode_nal_units_sum[8])
 #if CONFIG_ERROR_RESILIENCE
     /*
      * FIXME: Error handling code does not seem to support interlaced
@@ -851,7 +865,7 @@ end:
         ff_thread_report_progress(&h->cur_pic_ptr->tf, INT_MAX,
                                   h->picture_structure == PICT_BOTTOM_FIELD);
     }
-///gaj decode_nal_units_sum[8] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_nal_units_sum[8])
 
     return (ret < 0) ? ret : buf_size;
 }
@@ -918,7 +932,7 @@ static int finalize_frame(H264Context *h, AVFrame *dst, H264Picture *out, int *g
          (h->avctx->flags2 & AV_CODEC_FLAG2_SHOW_ALL) ||
          out->recovered)) {
 
-///gaj finalize_frame_sum[0] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(finalize_frame_sum[0])
         if (!h->avctx->hwaccel &&
             (out->field_poc[0] == INT_MAX ||
              out->field_poc[1] == INT_MAX)
@@ -941,17 +955,15 @@ static int finalize_frame(H264Context *h, AVFrame *dst, H264Picture *out, int *g
             av_image_copy(dst_data, linesizes, src_data, linesizes,
                           f->format, f->width, f->height>>1);
         }
-///gaj finalize_frame_sum[0] += GetNow();
-
-///gaj finalize_frame_sum[1] -= GetNow();
+GAJ_CHECK_PERFORMANCE_STOP_START(finalize_frame_sum[0],finalize_frame_sum[1])
         ret = output_frame(h, dst, out);
-///gaj finalize_frame_sum[1] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(finalize_frame_sum[1])
         if (ret < 0)
             return ret;
 
         *got_frame = 1;
 
-///gaj finalize_frame_sum[2] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(finalize_frame_sum[2])
         if (CONFIG_MPEGVIDEO) {
             ff_print_debug_info2(h->avctx, dst, NULL,
                                  out->mb_type,
@@ -960,7 +972,7 @@ static int finalize_frame(H264Context *h, AVFrame *dst, H264Picture *out, int *g
                                  NULL,
                                  h->mb_width, h->mb_height, h->mb_stride, 1);
         }
-///gaj finalize_frame_sum[2] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(finalize_frame_sum[2])
     }
 
     return 0;
@@ -1009,7 +1021,7 @@ static int h264_decode_frame(AVCodecContext *avctx, void *data,
     int buf_index;
     int ret;
 
-h264_decode_frame_sum[0] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(h264_decode_frame_sum[0])
 
 if (avpkt->flags & AV_PKT_FLAG_KEY) {
 static int key_received = 0;
@@ -1030,19 +1042,19 @@ key_received++;
     h->setup_finished = 0;
     h->nb_slice_ctx_queued = 0;
 
-h264_decode_frame_sum[1] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(h264_decode_frame_sum[1])
     ff_h264_unref_picture(h, &h->last_pic_for_ec);
-h264_decode_frame_sum[1] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(h264_decode_frame_sum[1])
 
     /* end of stream, output what is still in the buffers */
     if (buf_size == 0) {
-h264_decode_frame_sum[7] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(h264_decode_frame_sum[7])
         ret = send_next_delayed_frame(h, pict, got_frame, 0);
-h264_decode_frame_sum[7] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(h264_decode_frame_sum[7])
         goto label_return;
     }
 
-h264_decode_frame_sum[2] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(h264_decode_frame_sum[2])
     if (h->is_avc && av_packet_get_side_data(avpkt, AV_PKT_DATA_NEW_EXTRADATA, NULL)) {
         int side_size;
         uint8_t *side = av_packet_get_side_data(avpkt, AV_PKT_DATA_NEW_EXTRADATA, &side_size);
@@ -1051,29 +1063,29 @@ h264_decode_frame_sum[2] -= GetNow();
                                      &h->ps, &h->is_avc, &h->nal_length_size,
                                      avctx->err_recognition, avctx);
     }
-h264_decode_frame_sum[2] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(h264_decode_frame_sum[2])
     if (h->is_avc && buf_size >= 9 && buf[0]==1 && buf[2]==0 && (buf[4]&0xFC)==0xFC) {
-h264_decode_frame_sum[2] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(h264_decode_frame_sum[2])
         if (is_extra(buf, buf_size))
             ret = ff_h264_decode_extradata(buf, buf_size,
                                             &h->ps, &h->is_avc, &h->nal_length_size,
                                             avctx->err_recognition, avctx);
-h264_decode_frame_sum[2] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(h264_decode_frame_sum[2])
         goto label_return;
     }
 
-h264_decode_frame_sum[3] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(h264_decode_frame_sum[3])
     buf_index = decode_nal_units(h, buf, buf_size);
-h264_decode_frame_sum[3] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(h264_decode_frame_sum[3])
     if (buf_index < 0) {
         ret = AVERROR_INVALIDDATA;
         goto label_return;
     }
     if (!h->cur_pic_ptr && h->nal_unit_type == H264_NAL_END_SEQUENCE) {
-h264_decode_frame_sum[4] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(h264_decode_frame_sum[4])
         av_assert0(buf_index <= buf_size);
         ret = send_next_delayed_frame(h, pict, got_frame, buf_index);
-h264_decode_frame_sum[4] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(h264_decode_frame_sum[4])
         goto label_return;
     }
 
@@ -1090,19 +1102,19 @@ h264_decode_frame_sum[4] += GetNow();
 
     if (!(avctx->flags2 & AV_CODEC_FLAG2_CHUNKS) ||
         (h->mb_y >= h->mb_height && h->mb_height)) {
-h264_decode_frame_sum[8] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(h264_decode_frame_sum[8])
         if ((ret = ff_h264_field_end(h, &h->slice_ctx[0], 0)) < 0) {
             ret = ret;
-h264_decode_frame_sum[8] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(h264_decode_frame_sum[8])
             goto label_return;
         }
-h264_decode_frame_sum[8] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(h264_decode_frame_sum[8])
 
         /* Wait for second field. */
         if (h->next_output_pic) {
-h264_decode_frame_sum[9] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(h264_decode_frame_sum[9])
             ret = finalize_frame(h, pict, h->next_output_pic, got_frame);
-h264_decode_frame_sum[9] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(h264_decode_frame_sum[9])
             if (ret < 0) {
               goto label_return;
             }
@@ -1111,15 +1123,13 @@ h264_decode_frame_sum[9] += GetNow();
 
     av_assert0(pict->buf[0] || !*got_frame);
 
-h264_decode_frame_sum[5] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(h264_decode_frame_sum[5])
     ff_h264_unref_picture(h, &h->last_pic_for_ec);
-h264_decode_frame_sum[5] += GetNow();
-
-h264_decode_frame_sum[6] -= GetNow();
+GAJ_CHECK_PERFORMANCE_STOP_START(h264_decode_frame_sum[5],h264_decode_frame_sum[6])
     ret = get_consumed_bytes(buf_index, buf_size);
-h264_decode_frame_sum[6] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(h264_decode_frame_sum[6])
     label_return:
-h264_decode_frame_sum[0] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(h264_decode_frame_sum[0])
     return ret;
 }
 

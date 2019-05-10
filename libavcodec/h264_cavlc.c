@@ -37,8 +37,22 @@
 #include "mpegutils.h"
 #include "libavutil/avassert.h"
 
+///#define GAJ_PERFORMANCE_CHECKING
+
+#ifdef GAJ_PERFORMANCE_CHECKING
 extern long long int decode_mb_cavlc_sum[];
 extern long long int GetNow(void);
+#define GAJ_CHECK_PERFORMANCE_START(x) x-=GetNow();
+#define GAJ_CHECK_PERFORMANCE_STOP(x) x+=GetNow();
+#define GAJ_CHECK_PERFORMANCE_STOP_START(x,y) {const long long int t=GetNow();x+=t;y-=t;}
+#define GAJ_CHECK_PERFORMANCE_STOP_STOP(x,y) {const long long int t=GetNow();x+=t;y+=t;}
+#else
+#define GAJ_CHECK_PERFORMANCE_START(x)
+#define GAJ_CHECK_PERFORMANCE_STOP(x)
+#define GAJ_CHECK_PERFORMANCE_STOP_START(x,y)
+#define GAJ_CHECK_PERFORMANCE_STOP_STOP(x,y)
+#endif
+
 
 
 static const uint8_t golomb_to_inter_cbp_gray[16]={
@@ -445,7 +459,7 @@ static int decode_residual(const H264Context *h, H264SliceContext *sl,
 {
     static const int coeff_token_table_index[17]= {0, 0, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3};
     int zeros_left, coeff_token, total_coeff, i, trailing_ones, run_before;
-///gaj decode_mb_cavlc_sum[16] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(decode_mb_cavlc_sum[16])
 
     //FIXME put trailing_onex into the context
 
@@ -471,19 +485,15 @@ static int decode_residual(const H264Context *h, H264SliceContext *sl,
     //FIXME set last_non_zero?
 
     if(total_coeff==0) {
-///gaj decode_mb_cavlc_sum[16] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[16])
         return 0;
     }
     if(total_coeff > (unsigned)max_coeff) {
         av_log(h->avctx, AV_LOG_ERROR, "corrupted macroblock %d %d (total_coeff=%d)\n", sl->mb_x, sl->mb_y, total_coeff);
-///gaj decode_mb_cavlc_sum[16] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[16])
         return -1;
     }
-{
-///gaj const long long int t = GetNow();
-///gaj decode_mb_cavlc_sum[16] += t;
-///gaj decode_mb_cavlc_sum[17] -= t;
-}
+GAJ_CHECK_PERFORMANCE_STOP_START(decode_mb_cavlc_sum[16],decode_mb_cavlc_sum[17])
 
     trailing_ones= coeff_token&3;
     ff_tlog(h->avctx, "trailing:%d, total:%d\n", trailing_ones, total_coeff);
@@ -603,18 +613,15 @@ static int decode_residual(const H264Context *h, H264SliceContext *sl,
         } \
     }
 
-{
-///gaj const long long int t = GetNow();
-///gaj decode_mb_cavlc_sum[17] += t;
-///gaj decode_mb_cavlc_sum[18] -= t;
-}
+GAJ_CHECK_PERFORMANCE_STOP_START(decode_mb_cavlc_sum[17],decode_mb_cavlc_sum[18])
+
     if (h->pixel_shift) {
         STORE_BLOCK(int32_t)
     } else {
         STORE_BLOCK(int16_t)
     }
 
-///gaj decode_mb_cavlc_sum[18] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[18])
     if(zeros_left<0){
         av_log(h->avctx, AV_LOG_ERROR, "negative number of zero coeffs at %d %d\n", sl->mb_x, sl->mb_y);
         return -1;
@@ -684,9 +691,7 @@ int ff_h264_decode_mb_cavlc(const H264Context *h, H264SliceContext *sl)
     int dct8x8_allowed = h->ps.pps->transform_8x8_mode;
     const int decode_chroma = h->ps.sps->chroma_format_idc == 1 || h->ps.sps->chroma_format_idc == 2;
 
-///gaj decode_mb_cavlc_sum[19] -= GetNow();
-///gaj decode_mb_cavlc_sum[19] += GetNow();
-///gaj decode_mb_cavlc_sum[0] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(decode_mb_cavlc_sum[0])
 
     mb_xy = sl->mb_xy = sl->mb_x + sl->mb_y*h->mb_stride;
 
@@ -695,51 +700,49 @@ int ff_h264_decode_mb_cavlc(const H264Context *h, H264SliceContext *sl)
                 down the code */
     if (sl->slice_type_nos != AV_PICTURE_TYPE_I) {
         if (sl->mb_skip_run == -1) {
-///gaj decode_mb_cavlc_sum[14] -= GetNow();
-            unsigned mb_skip_run = get_ue_golomb_long(&sl->gb);
-///gaj decode_mb_cavlc_sum[14] += GetNow();
+            unsigned mb_skip_run;
+GAJ_CHECK_PERFORMANCE_START(decode_mb_cavlc_sum[14])
+            mb_skip_run = get_ue_golomb_long(&sl->gb);
+GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[14])
             if (mb_skip_run > h->mb_num) {
                 av_log(h->avctx, AV_LOG_ERROR, "mb_skip_run %d is invalid\n", mb_skip_run);
-///gaj decode_mb_cavlc_sum[0] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[0])
                 return AVERROR_INVALIDDATA;
             }
             sl->mb_skip_run = mb_skip_run;
         }
 
         if (sl->mb_skip_run--) {
-///gaj decode_mb_cavlc_sum[10] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(decode_mb_cavlc_sum[10])
             if (FRAME_MBAFF(h) && (sl->mb_y & 1) == 0) {
-///gaj decode_mb_cavlc_sum[10] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[10])
                 if (sl->mb_skip_run == 0) {
-///gaj decode_mb_cavlc_sum[11] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(decode_mb_cavlc_sum[11])
                     sl->mb_mbaff = sl->mb_field_decoding_flag = get_bits1(&sl->gb);
-///gaj decode_mb_cavlc_sum[11] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[11])
                 }
             } else {
-///gaj decode_mb_cavlc_sum[10] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[10])
             }
-///gaj decode_mb_cavlc_sum[12] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(decode_mb_cavlc_sum[12])
             decode_mb_skip(h, sl);
-///gaj decode_mb_cavlc_sum[12] += GetNow();
-///gaj decode_mb_cavlc_sum[0] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP_STOP(decode_mb_cavlc_sum[12],decode_mb_cavlc_sum[0])
             return 0;
         }
     }
 
-///gaj decode_mb_cavlc_sum[10] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(decode_mb_cavlc_sum[10])
     if (FRAME_MBAFF(h)) {
-///gaj decode_mb_cavlc_sum[10] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[10])
         if ((sl->mb_y & 1) == 0) {
-///gaj decode_mb_cavlc_sum[13] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(decode_mb_cavlc_sum[13])
             sl->mb_mbaff = sl->mb_field_decoding_flag = get_bits1(&sl->gb);
-///gaj decode_mb_cavlc_sum[13] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[13])
         }
     } else {
-///gaj decode_mb_cavlc_sum[10] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[10])
     }
-///gaj decode_mb_cavlc_sum[0] += GetNow();
-
-///gaj decode_mb_cavlc_sum[1] -= GetNow();
+GAJ_CHECK_PERFORMANCE_STOP_START(decode_mb_cavlc_sum[0],decode_mb_cavlc_sum[1])
 
     sl->prev_mb_skipped = 0;
 
@@ -767,7 +770,7 @@ int ff_h264_decode_mb_cavlc(const H264Context *h, H264SliceContext *sl)
 decode_intra_mb:
         if(mb_type > 25){
             av_log(h->avctx, AV_LOG_ERROR, "mb_type %d in %c slice too large at %d %d\n", mb_type, av_get_picture_type_char(sl->slice_type), sl->mb_x, sl->mb_y);
-///gaj decode_mb_cavlc_sum[1] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[1])
             return -1;
         }
         partition_count=0;
@@ -775,8 +778,7 @@ decode_intra_mb:
         sl->intra16x16_pred_mode = ff_h264_i_mb_type_info[mb_type].pred_mode;
         mb_type                  = ff_h264_i_mb_type_info[mb_type].type;
     }
-///gaj decode_mb_cavlc_sum[1] += GetNow();
-///gaj decode_mb_cavlc_sum[2] -= GetNow();
+GAJ_CHECK_PERFORMANCE_STOP_START(decode_mb_cavlc_sum[1],decode_mb_cavlc_sum[2])
 
     if (MB_FIELD(sl))
         mb_type |= MB_TYPE_INTERLACED;
@@ -791,7 +793,7 @@ decode_intra_mb:
         sl->intra_pcm_ptr = align_get_bits(&sl->gb);
         if (get_bits_left(&sl->gb) < mb_size) {
             av_log(h->avctx, AV_LOG_ERROR, "Not enough data for an intra PCM block.\n");
-///gaj decode_mb_cavlc_sum[2] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[2])
             return AVERROR_INVALIDDATA;
         }
         skip_bits_long(&sl->gb, mb_size);
@@ -802,15 +804,14 @@ decode_intra_mb:
         memset(h->non_zero_count[mb_xy], 16, 48);
 
         h->cur_pic.mb_type[mb_xy] = mb_type;
-///gaj decode_mb_cavlc_sum[2] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[2])
         return 0;
     }
 
     fill_decode_neighbors(h, sl, mb_type);
     fill_decode_caches(h, sl, mb_type);
 
-///gaj decode_mb_cavlc_sum[2] += GetNow();
-///gaj decode_mb_cavlc_sum[3] -= GetNow();
+GAJ_CHECK_PERFORMANCE_STOP_START(decode_mb_cavlc_sum[2],decode_mb_cavlc_sum[3])
 
     //mb_pred
     if(IS_INTRA(mb_type)){
@@ -841,14 +842,14 @@ decode_intra_mb:
             write_back_intra_pred_mode(h, sl);
             if (ff_h264_check_intra4x4_pred_mode(sl->intra4x4_pred_mode_cache, h->avctx,
                                                  sl->top_samples_available, sl->left_samples_available) < 0) {
-///gaj decode_mb_cavlc_sum[3] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[3])
                 return -1;
             }
         }else{
             sl->intra16x16_pred_mode = ff_h264_check_intra_pred_mode(h->avctx, sl->top_samples_available,
                                                                      sl->left_samples_available, sl->intra16x16_pred_mode, 0);
             if (sl->intra16x16_pred_mode < 0) {
-///gaj decode_mb_cavlc_sum[3] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[3])
                 return -1;
             }
         }
@@ -856,7 +857,7 @@ decode_intra_mb:
             pred_mode= ff_h264_check_intra_pred_mode(h->avctx, sl->top_samples_available,
                                                      sl->left_samples_available, get_ue_golomb_31(&sl->gb), 1);
             if(pred_mode < 0) {
-///gaj decode_mb_cavlc_sum[3] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[3])
                 return -1;
             }
             sl->chroma_pred_mode = pred_mode;
@@ -871,7 +872,7 @@ decode_intra_mb:
                 sl->sub_mb_type[i]= get_ue_golomb_31(&sl->gb);
                 if(sl->sub_mb_type[i] >=13){
                     av_log(h->avctx, AV_LOG_ERROR, "B sub_mb_type %u out of range at %d %d\n", sl->sub_mb_type[i], sl->mb_x, sl->mb_y);
-///gaj decode_mb_cavlc_sum[3] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[3])
                     return -1;
                 }
                 sub_partition_count[i] = ff_h264_b_sub_mb_type_info[sl->sub_mb_type[i]].partition_count;
@@ -890,7 +891,7 @@ decode_intra_mb:
                 sl->sub_mb_type[i]= get_ue_golomb_31(&sl->gb);
                 if(sl->sub_mb_type[i] >=4){
                     av_log(h->avctx, AV_LOG_ERROR, "P sub_mb_type %u out of range at %d %d\n", sl->sub_mb_type[i], sl->mb_x, sl->mb_y);
-///gaj decode_mb_cavlc_sum[3] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[3])
                     return -1;
                 }
                 sub_partition_count[i] = ff_h264_p_sub_mb_type_info[sl->sub_mb_type[i]].partition_count;
@@ -912,7 +913,7 @@ decode_intra_mb:
                         tmp= get_ue_golomb_31(&sl->gb);
                         if(tmp>=ref_count){
                             av_log(h->avctx, AV_LOG_ERROR, "ref %u overflow\n", tmp);
-///gaj decode_mb_cavlc_sum[3] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[3])
                             return -1;
                         }
                     }
@@ -989,7 +990,7 @@ decode_intra_mb:
                             val= get_ue_golomb_31(&sl->gb);
                             if (val >= rc) {
                                 av_log(h->avctx, AV_LOG_ERROR, "ref %u overflow\n", val);
-///gaj decode_mb_cavlc_sum[3] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[3])
                                 return -1;
                             }
                         }
@@ -1021,7 +1022,7 @@ decode_intra_mb:
                                 val= get_ue_golomb_31(&sl->gb);
                                 if (val >= rc) {
                                     av_log(h->avctx, AV_LOG_ERROR, "ref %u overflow\n", val);
-///gaj decode_mb_cavlc_sum[3] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[3])
                                     return -1;
                                 }
                             }
@@ -1060,7 +1061,7 @@ decode_intra_mb:
                                 val= get_ue_golomb_31(&sl->gb);
                                 if (val >= rc) {
                                     av_log(h->avctx, AV_LOG_ERROR, "ref %u overflow\n", val);
-///gaj decode_mb_cavlc_sum[3] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[3])
                                     return -1;
                                 }
                             }
@@ -1086,8 +1087,7 @@ decode_intra_mb:
             }
         }
     }
-///gaj decode_mb_cavlc_sum[3] += GetNow();
-///gaj decode_mb_cavlc_sum[4] -= GetNow();
+GAJ_CHECK_PERFORMANCE_STOP_START(decode_mb_cavlc_sum[3],decode_mb_cavlc_sum[4])
 
     if(IS_INTER(mb_type))
         write_back_motion(h, sl, mb_type);
@@ -1098,7 +1098,7 @@ decode_intra_mb:
         if(decode_chroma){
             if(cbp > 47){
                 av_log(h->avctx, AV_LOG_ERROR, "cbp too large (%u) at %d %d\n", cbp, sl->mb_x, sl->mb_y);
-///gaj decode_mb_cavlc_sum[4] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[4])
                 return -1;
             }
             if (IS_INTRA4x4(mb_type))
@@ -1108,7 +1108,7 @@ decode_intra_mb:
         }else{
             if(cbp > 15){
                 av_log(h->avctx, AV_LOG_ERROR, "cbp too large (%u) at %d %d\n", cbp, sl->mb_x, sl->mb_y);
-///gaj decode_mb_cavlc_sum[4] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[4])
                 return -1;
             }
             if(IS_INTRA4x4(mb_type)) cbp= golomb_to_intra4x4_cbp_gray[cbp];
@@ -1117,7 +1117,7 @@ decode_intra_mb:
     } else {
         if (!decode_chroma && cbp>15) {
             av_log(h->avctx, AV_LOG_ERROR, "gray chroma\n");
-///gaj decode_mb_cavlc_sum[4] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[4])
             return AVERROR_INVALIDDATA;
         }
     }
@@ -1128,7 +1128,7 @@ decode_intra_mb:
     sl->cbp=
     h->cur_pic.mb_type[mb_xy] = mb_type;
 
-///gaj decode_mb_cavlc_sum[4] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[4])
 
     if(cbp || IS_INTRA16x16(mb_type)){
         int i4x4, i8x8, chroma_idx;
@@ -1136,7 +1136,7 @@ decode_intra_mb:
         GetBitContext *gb = &sl->gb;
         const uint8_t *scan;
         const int max_qp = 51 + 6 * (h->ps.sps->bit_depth_luma - 8);
-///gaj decode_mb_cavlc_sum[5] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(decode_mb_cavlc_sum[5])
 
         dquant= get_se_golomb(&sl->gb);
 
@@ -1148,7 +1148,7 @@ decode_intra_mb:
             if (((unsigned)sl->qscale) > max_qp){
                 av_log(h->avctx, AV_LOG_ERROR, "dquant out of range (%d) at %d %d\n", dquant, sl->mb_x, sl->mb_y);
                 sl->qscale = max_qp;
-///gaj decode_mb_cavlc_sum[5] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[5])
                 return -1;
             }
         }
@@ -1161,36 +1161,34 @@ decode_intra_mb:
         }else{
             scan    = sl->qscale ? h->zigzag_scan : h->zigzag_scan_q0;
         }
-///gaj decode_mb_cavlc_sum[5] += GetNow();
-
-///gaj decode_mb_cavlc_sum[6] -= GetNow();
+GAJ_CHECK_PERFORMANCE_STOP_START(decode_mb_cavlc_sum[5],decode_mb_cavlc_sum[6])
         if (decode_luma_residual(h, sl, gb, scan, mb_type, cbp, 0) < 0 ) {
-///gaj decode_mb_cavlc_sum[6] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[6])
             return -1;
         }
-///gaj decode_mb_cavlc_sum[6] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[6])
 
         if (CHROMA444(h)) {
-///gaj decode_mb_cavlc_sum[6] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(decode_mb_cavlc_sum[6])
             if (decode_luma_residual(h, sl, gb, scan, mb_type, cbp, 1) < 0 ) {
-///gaj decode_mb_cavlc_sum[6] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[6])
                 return -1;
             }
             if (decode_luma_residual(h, sl, gb, scan, mb_type, cbp, 2) < 0 ) {
-///gaj decode_mb_cavlc_sum[6] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[6])
                 return -1;
             }
-///gaj decode_mb_cavlc_sum[6] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[6])
         } else {
             const int num_c8x8 = h->ps.sps->chroma_format_idc;
-///gaj decode_mb_cavlc_sum[7] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(decode_mb_cavlc_sum[7])
 
             if(cbp&0x30){
                 for(chroma_idx=0; chroma_idx<2; chroma_idx++)
                     if (decode_residual(h, sl, gb,
                                         CHROMA_DC_BLOCK_INDEX + chroma_idx,
                                         4 * num_c8x8) < 0) {
-///gaj decode_mb_cavlc_sum[7] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[7])
                         return -1;
                     }
             }
@@ -1201,7 +1199,7 @@ decode_intra_mb:
                         for (i4x4 = 0; i4x4 < 4; i4x4++) {
                             const int index = 16 + 16*chroma_idx + 8*i8x8 + i4x4;
                             if (decode_residual(h, sl, gb, index, 15) < 0) {
-///gaj decode_mb_cavlc_sum[7] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[7])
                                 return -1;
                             }
                         }
@@ -1211,19 +1209,19 @@ decode_intra_mb:
                 fill_rectangle(&sl->non_zero_count_cache[scan8[16]], 4, 4, 8, 0, 1);
                 fill_rectangle(&sl->non_zero_count_cache[scan8[32]], 4, 4, 8, 0, 1);
             }
-///gaj decode_mb_cavlc_sum[7] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[7])
         }
     }else{
-///gaj decode_mb_cavlc_sum[8] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(decode_mb_cavlc_sum[8])
         fill_rectangle(&sl->non_zero_count_cache[scan8[ 0]], 4, 4, 8, 0, 1);
         fill_rectangle(&sl->non_zero_count_cache[scan8[16]], 4, 4, 8, 0, 1);
         fill_rectangle(&sl->non_zero_count_cache[scan8[32]], 4, 4, 8, 0, 1);
-///gaj decode_mb_cavlc_sum[8] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[8])
     }
-///gaj decode_mb_cavlc_sum[9] -= GetNow();
+GAJ_CHECK_PERFORMANCE_START(decode_mb_cavlc_sum[9])
     h->cur_pic.qscale_table[mb_xy] = sl->qscale;
     write_back_non_zero_count(h, sl);
-///gaj decode_mb_cavlc_sum[9] += GetNow();
+GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[9])
 
     return 0;
 }
