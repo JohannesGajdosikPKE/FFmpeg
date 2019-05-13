@@ -717,9 +717,9 @@ GAJ_CHECK_PERFORMANCE_START(decode_mb_cavlc_sum[10])
             if (FRAME_MBAFF(h) && (sl->mb_y & 1) == 0) {
 GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[10])
                 if (sl->mb_skip_run == 0) {
-GAJ_CHECK_PERFORMANCE_START(decode_mb_cavlc_sum[11])
+GAJ_CHECK_PERFORMANCE_START(decode_mb_cavlc_sum[8])
                     sl->mb_mbaff = sl->mb_field_decoding_flag = get_bits1(&sl->gb);
-GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[11])
+GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[8])
                 }
             } else {
 GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[10])
@@ -834,9 +834,11 @@ GAJ_CHECK_PERFORMANCE_STOP_START(decode_mb_cavlc_sum[2],decode_mb_cavlc_sum[3])
                     mode = rem_mode + (rem_mode >= mode);
                 }
 
-                if(di==4)
+                if(di==4) {
+GAJ_CHECK_PERFORMANCE_START(decode_mb_cavlc_sum[8])
                     fill_rectangle(&sl->intra4x4_pred_mode_cache[ scan8[i] ], 2, 2, 8, mode, 1);
-                else
+GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[8])
+                } else
                     sl->intra4x4_pred_mode_cache[scan8[i]] = mode;
             }
             write_back_intra_pred_mode(h, sl);
@@ -994,7 +996,9 @@ GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[3])
                                 return -1;
                             }
                         }
+GAJ_CHECK_PERFORMANCE_START(decode_mb_cavlc_sum[8])
                     fill_rectangle(&sl->ref_cache[list][ scan8[0] ], 4, 4, 8, val, 1);
+GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[8])
                     }
             }
             for (list = 0; list < sl->list_count; list++) {
@@ -1004,7 +1008,9 @@ GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[3])
                     my += get_se_golomb(&sl->gb);
                     ff_tlog(h->avctx, "final mv:%d %d\n", mx, my);
 
+GAJ_CHECK_PERFORMANCE_START(decode_mb_cavlc_sum[8])
                     fill_rectangle(sl->mv_cache[list][ scan8[0] ], 4, 4, 8, pack16to32(mx,my), 4);
+GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[8])
                 }
             }
         }
@@ -1028,7 +1034,9 @@ GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[3])
                             }
                         }else
                             val= LIST_NOT_USED&0xFF;
+GAJ_CHECK_PERFORMANCE_START(decode_mb_cavlc_sum[8])
                         fill_rectangle(&sl->ref_cache[list][ scan8[0] + 16*i ], 4, 2, 8, val, 1);
+GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[8])
                     }
             }
             for (list = 0; list < sl->list_count; list++) {
@@ -1043,7 +1051,9 @@ GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[3])
                         val= pack16to32(mx,my);
                     }else
                         val=0;
+GAJ_CHECK_PERFORMANCE_START(decode_mb_cavlc_sum[8])
                     fill_rectangle(sl->mv_cache[list][ scan8[0] + 16*i ], 4, 2, 8, val, 4);
+GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[8])
                 }
             }
         }else{
@@ -1067,7 +1077,9 @@ GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[3])
                             }
                         }else
                             val= LIST_NOT_USED&0xFF;
+GAJ_CHECK_PERFORMANCE_START(decode_mb_cavlc_sum[8])
                         fill_rectangle(&sl->ref_cache[list][ scan8[0] + 2*i ], 2, 4, 8, val, 1);
+GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[8])
                     }
             }
             for (list = 0; list < sl->list_count; list++) {
@@ -1082,7 +1094,9 @@ GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[3])
                         val= pack16to32(mx,my);
                     }else
                         val=0;
+GAJ_CHECK_PERFORMANCE_START(decode_mb_cavlc_sum[8])
                     fill_rectangle(sl->mv_cache[list][ scan8[0] + 2*i ], 2, 4, 8, val, 4);
+GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[8])
                 }
             }
         }
@@ -1206,8 +1220,10 @@ GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[7])
                     }
                 }
             }else{
+GAJ_CHECK_PERFORMANCE_START(decode_mb_cavlc_sum[8])
                 fill_rectangle(&sl->non_zero_count_cache[scan8[16]], 4, 4, 8, 0, 1);
                 fill_rectangle(&sl->non_zero_count_cache[scan8[32]], 4, 4, 8, 0, 1);
+GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[8])
             }
 GAJ_CHECK_PERFORMANCE_STOP(decode_mb_cavlc_sum[7])
         }
