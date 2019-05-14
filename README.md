@@ -2,5 +2,4 @@ This code is a fork of the popular ffmpeg. The goal is to crate a library that c
 
 I configure it like that:
 
- ./configure --enable-static --disable-everything --disable-filters --disable-hwaccels --enable-decoder=h264 --disable-libv4l2 --disable-vdpau --disable-xvmc --disable-bzlib --disable-zlib --disable-doc --disable-network --disable-lzo --disable-swresample --disable-swscale --disable-autodetect --disable-iconv --disable-indev=alsa --disable-outdev=alsa --disable-libv4l2 --disable-indev=v4l2 --disable-outdev=v4l2 --disable-outdev=xv --disable-indev=xcbgrab --disable-outdev=sdl2 --disable-programs
- 
+ ./configure --enable-static --disable-everything --disable-doc --disable-swresample --disable-avfilter --disable-avdevice --disable-avformat --disable-swscale --disable-autodetect --disable-programs --enable-decoder=h264 --enable-parser=mpegvideo --disable-iconv
