@@ -1,4 +1,27 @@
 /*
+ * Author: Johannes Gajdosik
+ * copyright (c) 2019 PKE Holding
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ */
+
+/*
 
 Linux:
 
@@ -46,20 +69,20 @@ static inline unsigned long long int ReverseBits(unsigned long long int x) {
 }
 
 
-static void print_motion_vectors_data(const AVMotionVector *mv){
+static void PrintMotionVector(const AVMotionVector *mv){
   printf("%2d x %2d | src:(%4d,%4d) | dst:(%4d,%4d) | dx:%4d | dy:%4d | motion_x:%4d | motion_y:%4d | motion_scale:%4d | 0x%Lx |\n",
-      mv->w,
-      mv->h,
-      mv->src_x,
-      mv->src_y,
-      mv->dst_x,
-      mv->dst_y,
-      mv->dst_x - mv->src_x,
-      mv->dst_y - mv->src_y,
-      mv->motion_x,
-      mv->motion_y,
-      mv->motion_scale,
-      (long long unsigned int)(mv->flags));
+         mv->w,
+         mv->h,
+         mv->src_x,
+         mv->src_y,
+         mv->dst_x,
+         mv->dst_y,
+         mv->dst_x - mv->src_x,
+         mv->dst_y - mv->src_y,
+         mv->motion_x,
+         mv->motion_y,
+         mv->motion_scale,
+         (long long unsigned int)(mv->flags));
 }
 
 static void MV_CB(void *user_data,
@@ -73,11 +96,7 @@ static void MV_CB(void *user_data,
   prev_pts = pts;
   for (i=0;i<nr_of_mvs;i++) {
     const AVMotionVector *mv = &mvs[i];
-    print_motion_vectors_data(mv);
-//    printf("%2d,%2d,%2d,%4d,%4d,%4d,%4d,0x%lx\n",
-//           mv->source, mv->w, mv->h,
-//           mv->src_x, mv->src_y,
-//           mv->dst_x, mv->dst_y, mv->flags);
+    PrintMotionVector(mv);
   }
 }
 

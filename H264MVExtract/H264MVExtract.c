@@ -1,4 +1,27 @@
 /*
+ * Author: Johannes Gajdosik
+ * copyright (c) 2019 PKE Holding
+ *
+ * This file is part of libH264MVExtract.
+ *
+ * libH264MVExtract is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * libH264MVExtract is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with libH264MVExtract; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+ */
+
+
+
+/*
 
 Linux:
 
@@ -6,6 +29,15 @@ gcc H264MVExtract.c -O3 -fPIC -c -o H264MVExtract.o -I..
 gcc -shared -Wl,-Bsymbolic -Wl,--version-script=H264MVExtract.version_script \
 -o libH264MVExtract.so H264MVExtract.o \
 ../libavcodec/libavcodec.a ../libavutil/libavutil.a
+strip --strip-all libH264MVExtract.so
+
+Windows crosscompilation:
+
+x86_64-w64-mingw32-gcc H264MVExtract.c -O3 -c -o H264MVExtract.o -I.. \
+-DH264MVExtract_COMPILE_DLL
+x86_64-w64-mingw32-gcc -shared -Wl,-Bsymbolic -o H264MVExtract.dll \
+H264MVExtract.o ../libavcodec/libavcodec.a ../libavutil/libavutil.a
+x86_64-w64-mingw32-strip --strip-all H264MVExtract.dll
 
 */
 
