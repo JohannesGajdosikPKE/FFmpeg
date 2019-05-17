@@ -29,28 +29,27 @@ g++ -O3 -o H264MVExtractTest H264MVExtractTest.cpp \
 -L. -lH264MVExtract -lpthread
 export LD_LIBRARY_PATH=`pwd`
 
+
+Windows mscv:
+cl -EHsc H264MVExtractTest.cpp -D__STDC_LIMIT_MACROS -ID:\\tfs\\VSLibs\\include H264MVExtract.lib
+
 */
 
 #include "H264MVExtract.h"
 
 #include <libavutil/motion_vector.h>
 
-#include <time.h>
+#include <chrono>
 
 #include <stdio.h>
 #include <stdlib.h>
 
-static long long int prev_time = -0x8000000000000000LL;
 extern "C" {
 long long int GetNow(void) {
-  struct timespec ts;
-  clock_gettime(CLOCK_MONOTONIC_COARSE,&ts);
-  long long int rval = ts.tv_sec*1000000000LL+ts.tv_nsec;
-  if (rval <= prev_time) rval = prev_time+1;
-  prev_time = rval;
-  return rval;
+  return std::chrono::duration_cast<std::chrono::nanoseconds>(
+           std::chrono::steady_clock::now()
+             .time_since_epoch()).count();
 }
-
 long long int h264_decode_frame_sum[10] = {0,0,0,0,0,0,0,0,0,0};
 long long int decode_nal_units_sum[10] = {0,0,0,0,0,0,0,0,0,0};
 long long int decode_slice_sum[10] = {0,0,0,0,0,0,0,0,0,0};

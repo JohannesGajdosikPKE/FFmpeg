@@ -38,6 +38,7 @@ x86_64-w64-mingw32-gcc H264MVExtract.c -O3 -c -o H264MVExtract.o -I.. \
 x86_64-w64-mingw32-gcc -shared -Wl,-Bsymbolic -o H264MVExtract.dll \
 H264MVExtract.o ../libavcodec/libavcodec.a ../libavutil/libavutil.a
 x86_64-w64-mingw32-strip --strip-all H264MVExtract.dll
+x86_64-w64-mingw32-dlltool -d H264MVExtract.def -l H264MVExtract.lib -D H264MVExtract.dll
 
 */
 
