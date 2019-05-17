@@ -48,7 +48,7 @@
 #include "rectangle.h"
 #include "thread.h"
 
-#define GAJ_PERFORMANCE_CHECKING
+///#define GAJ_PERFORMANCE_CHECKING
 
 #ifdef GAJ_PERFORMANCE_CHECKING
 extern long long int decode_slice_sum[];

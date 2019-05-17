@@ -55,7 +55,7 @@
 #include "rectangle.h"
 #include "thread.h"
 
-#define GAJ_PERFORMANCE_CHECKING
+///#define GAJ_PERFORMANCE_CHECKING
 
 #ifdef GAJ_PERFORMANCE_CHECKING
 extern long long int h264_decode_frame_sum[];
