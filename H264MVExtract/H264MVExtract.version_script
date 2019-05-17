@@ -1,0 +1,8 @@
+{
+  global:
+    H264MVExtract_CreateContext;
+    H264MVExtract_DestroyContext;
+    H264MVExtract_FlushContext;
+    H264MVExtract_DecodeFrame;
+  local: *;
+};
