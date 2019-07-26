@@ -85,13 +85,15 @@ static void PrintMotionVector(const AVMotionVector *mv){
 }
 
 static void MV_CB(void *user_data,
+                  int width,int height,
                   long long int pts,
                   const struct AVMotionVector *mvs,
                   int nr_of_mvs) {
   int i;
   pts = ReverseBits(pts);
   static long long int prev_pts = 0;
-//printf("received %Ld %Ld: %d\n",pts,pts-prev_pts,nr_of_mvs);
+//printf("received %dx%d, %Ld %Ld: %d\n",
+//       width,height,pts,pts-prev_pts,nr_of_mvs);
   prev_pts = pts;
   for (i=0;i<nr_of_mvs;i++) {
     const AVMotionVector *mv = &mvs[i];

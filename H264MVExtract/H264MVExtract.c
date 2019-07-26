@@ -140,12 +140,16 @@ int H264MVExtract_DecodeFrame(void *context,
       if (sd) {
         ((H264MVExtract_Context*)context)
           ->cb(((H264MVExtract_Context*)context)->user_data,
+               ((H264MVExtract_Context*)context)->codec_context->width,
+               ((H264MVExtract_Context*)context)->codec_context->height,
                ((H264MVExtract_Context*)context)->frame->pts,
                (const AVMotionVector*)sd->data,
                sd->size/sizeof(AVMotionVector));
       } else {
         ((H264MVExtract_Context*)context)
           ->cb(((H264MVExtract_Context*)context)->user_data,
+               ((H264MVExtract_Context*)context)->codec_context->width,
+               ((H264MVExtract_Context*)context)->codec_context->height,
                ((H264MVExtract_Context*)context)->frame->pts,
                NULL,0);
       }

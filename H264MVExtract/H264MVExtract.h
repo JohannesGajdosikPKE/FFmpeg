@@ -39,6 +39,7 @@ extern "C" {
 struct AVMotionVector; /* from libavutil/motion_vector.h */
 
 typedef void (*H264MVExtract_CB)(void *user_data,
+                                 int width,int height,
                                  long long int pts,
                                  const struct AVMotionVector *mvs,
                                  int nr_of_mvs);
